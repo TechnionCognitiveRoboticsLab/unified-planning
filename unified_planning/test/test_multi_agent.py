@@ -138,3 +138,15 @@ class TestProblem(TestCase):
         self.assertTrue(problem.initial_value(cargo_at(l3)) is not None)
         self.assertTrue(problem.initial_value(Dot(ag1, pos)) is not None)
         self.assertEqual(len(problem.goals), 1)
+
+    def test_intersection(self):
+        problem = self.problems["intersection"].problem
+
+        self.assertEqual(len(problem.ma_environment.fluents), 2)
+        self.assertEqual(len(problem.agents), 4)
+        self.assertEqual(len(problem.agents[0].fluents), 4)
+        self.assertEqual(len(problem.agents[0].actions), 2)
+
+        plan = self.problems["intersection"].plan
+
+        self.assertEqual(len(plan.actions), 16)

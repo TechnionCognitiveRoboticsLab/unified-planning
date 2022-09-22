@@ -138,6 +138,158 @@ def get_example_problems():
         ]
     )
     ma_loader = Example(problem=problem, plan=plan)
-    problems["ma-loader"] = ma_loader
+    problems["ma-loader"] = ma_loader    
+
+    # intersection multi agent
+    problem = MultiAgentProblem("intersection")
+
+    loc = UserType("loc")
+    direction = UserType("direction")
+    car = UserType("car")
+
+    # Environment     
+    connected = Fluent('connected', BoolType(), l1=loc, l2=loc, d=direction)
+    free = Fluent('free', BoolType(), l=loc)
+    
+    problem.ma_environment.add_fluent(connected, default_initial_value=False)
+    problem.ma_environment.add_fluent(free, default_initial_value=False)
+
+    intersection_map = {
+        "north": ["south-ent", "cross-se", "cross-ne", "north-ex"],
+        "south": ["north-ent", "cross-nw", "cross-sw", "south-ex"],
+        "west": ["east-ent", "cross-ne", "cross-nw", "west-ex"],
+        "east": ["west-ent", "cross-sw", "cross-se", "east-ex"]
+    }
+
+    location_names = set()
+    for l in intersection_map.values():
+        location_names = location_names.union(l)
+    locations = list(map(lambda l: unified_planning.model.Object(l, loc), location_names))
+    problem.add_objects(locations)
+
+    direction_names = intersection_map.keys()
+    directions = list(map(lambda d: unified_planning.model.Object(d, direction), direction_names))
+    problem.add_objects(directions)
+
+
+    # Agents
+    car1 = Agent("car1", problem)
+    car2 = Agent("car2", problem)
+    car3 = Agent("car3", problem)
+    car4 = Agent("car4", problem)
+
+    at = Fluent('at', BoolType(), l1=loc)    
+    arrived = Fluent('arrived', BoolType())
+    start = Fluent('start', BoolType(), l=loc)        
+    traveldirection = Fluent('traveldirection', BoolType(), d=direction)
+    
+    #  (:action arrive
+        #     :agent    ?a - car 
+        #     :parameters  (?l - loc)
+        #     :precondition  (and  
+        #     	(start ?a ?l)
+        #     	(not (arrived ?a))
+        #     	(free ?l)      
+        #       )
+        #     :effect    (and     	
+        #     	(at ?a ?l)
+        #     	(not (free ?l))
+        #     	(arrived ?a)
+        #       )
+        #   )
+    arrive = InstantaneousAction('arrive', l=loc)    
+    l = arrive.parameter('l')
+    arrive.add_precondition(start(l))
+    arrive.add_precondition(Not(arrived()))
+    arrive.add_precondition(free(l))
+    arrive.add_effect(at(l), True)
+    arrive.add_effect(free(l), False)
+    arrive.add_effect(arrived(), True)   
+
+
+
+    #   (:action drive
+    #     :agent    ?a - car 
+    #     :parameters  (?l1 - loc ?l2 - loc ?d - direction ?ly - loc)
+    #     :precondition  (and      	
+    #     	(at ?a ?l1)
+    #     	(free ?l2)     
+    #     	(travel-direction ?a ?d)
+    #     	(connected ?l1 ?l2 ?d)
+    #     	(yields-to ?l1 ?ly)
+    #     	(free ?ly)
+    #       )
+    #     :effect    (and     	
+    #     	(at ?a ?l2)
+    #     	(not (free ?l2))
+    #     	(not (at ?a ?l1))
+    #     	(free ?l1)
+    #       )
+    #    )    
+    # )
+    drive = InstantaneousAction('drive', l1=loc, l2=loc, d=direction)#, ly=loc)    
+    l1 = drive.parameter('l1')
+    l2 = drive.parameter('l2')
+    d = drive.parameter('d')
+    #ly = drive.parameter('ly')
+    drive.add_precondition(at(l1))
+    #if use_waiting:
+    #    drive.add_precondition_wait(free(l2))
+    #else:
+    #    drive.add_precondition(free(l2))
+    drive.add_precondition(free(l2))  # Remove for yield/wait
+    drive.add_precondition(traveldirection(d))
+    drive.add_precondition(connected(l1,l2,d))
+    #drive.add_precondition(yieldsto(l1,ly))
+    #drive.add_precondition(free(ly))
+    drive.add_effect(at(l2),True)
+    drive.add_effect(free(l2), False)
+    drive.add_effect(at(l1), False)
+    drive.add_effect(free(l1), True)    
+
+
+
+    plan = up.plans.SequentialPlan([])
+
+    for d, l in intersection_map.items():
+        carname = "car-" + d
+        car = Agent(carname, problem)
+    
+        problem.add_agent(car)
+        car.add_fluent(at)
+        car.add_fluent(arrived)
+        car.add_fluent(start)
+        car.add_fluent(traveldirection)
+        car.add_action(arrive)
+        car.add_action(drive)
+
+        slname = l[0]
+        slobj = unified_planning.model.Object(slname, loc)
+
+        glname = l[-1]
+        globj = unified_planning.model.Object(glname, loc)
+        
+        dobj = unified_planning.model.Object(d, direction)
+
+
+        problem.set_initial_value(car.fluent("start")(slobj), True)
+        problem.set_initial_value(car.fluent("traveldirection")(dobj), True)
+        problem.add_goal(car.fluent("at")(globj))
+
+        slobjexp1 = (ObjectExp(slobj)),        
+        plan.actions.append(up.plans.ActionInstance(arrive, slobjexp1, car))
+
+        for i in range(1,len(l)):
+            flname = l[i-1]
+            tlname = l[i]
+            flobj = unified_planning.model.Object(flname, loc)
+            tlobj = unified_planning.model.Object(tlname, loc)
+            plan.actions.append(up.plans.ActionInstance(drive, (ObjectExp(flobj), ObjectExp(tlobj), ObjectExp(dobj) ), car))
+
+
+    intersection = Example(problem=problem, plan=plan)
+    problems["intersection"] = intersection
+
+    print(plan)
 
     return problems
