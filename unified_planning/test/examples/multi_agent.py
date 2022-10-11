@@ -256,10 +256,10 @@ def get_example_problems():
         car = Agent(carname, problem)
     
         problem.add_agent(car)
-        car.add_fluent(at)
-        car.add_fluent(arrived)
-        car.add_fluent(start)
-        car.add_fluent(traveldirection)
+        car.add_fluent(at, default_initial_value=False)
+        car.add_fluent(arrived, default_initial_value=False)
+        car.add_fluent(start, default_initial_value=False)
+        car.add_fluent(traveldirection, default_initial_value=False)
         car.add_action(arrive)
         car.add_action(drive)
 
