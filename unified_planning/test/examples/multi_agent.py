@@ -183,6 +183,7 @@ def get_example_problems():
 
     at = Fluent('at', BoolType(), l1=loc)    
     arrived = Fluent('arrived', BoolType())
+    not_arrived = Fluent('not-arrived', BoolType())
     start = Fluent('start', BoolType(), l=loc)        
     traveldirection = Fluent('traveldirection', BoolType(), d=direction)
     
@@ -203,11 +204,12 @@ def get_example_problems():
     arrive = InstantaneousAction('arrive', l=loc)    
     l = arrive.parameter('l')
     arrive.add_precondition(start(l))
-    arrive.add_precondition(Not(arrived()))
+    arrive.add_precondition(not_arrived())
     arrive.add_precondition(free(l))
     arrive.add_effect(at(l), True)
     arrive.add_effect(free(l), False)
     arrive.add_effect(arrived(), True)   
+    arrive.add_effect(not_arrived(), False)   
 
 
 
@@ -261,6 +263,7 @@ def get_example_problems():
         problem.add_agent(car)
         car.add_fluent(at, default_initial_value=False)
         car.add_fluent(arrived, default_initial_value=False)
+        car.add_fluent(not_arrived, default_initial_value=True)
         car.add_fluent(start, default_initial_value=False)
         car.add_fluent(traveldirection, default_initial_value=False)
         car.add_action(arrive)
