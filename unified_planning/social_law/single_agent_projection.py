@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-"""This module defines the single agent projection transformer class."""
+"""This module defines the single agent projection compiler class."""
 
 import unified_planning as up
 import unified_planning.engines as engines
@@ -100,8 +100,6 @@ class SingleAgentProjection(engines.engine.Engine, CompilerMixin):
 
         #Represents the map from the new action to the old action
         new_to_old: Dict[Action, Action] = {}
-        #represents a mapping from the action of the original problem to action of the new one.
-        old_to_new: Dict[Action, List[Action]] = {}
 
         new_problem = Problem()
         new_problem.name = f'{self.name}_{problem.name}'
