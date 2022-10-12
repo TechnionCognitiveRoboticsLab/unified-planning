@@ -365,6 +365,6 @@ class MultiAgentProblem(
                 self._update_problem_kind_condition(c)
             for e in action.effects:
                 self._update_problem_kind_effect(e)
-            self._kind.set_time("CONTINUOUS_TIME")
+            #self._kind.set_time("CONTINUOUS_TIME")
         else:
             raise NotImplementedError
