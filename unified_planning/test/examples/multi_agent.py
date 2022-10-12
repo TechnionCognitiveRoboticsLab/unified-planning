@@ -152,7 +152,7 @@ def get_example_problems():
     free = Fluent('free', BoolType(), l=loc)
     
     problem.ma_environment.add_fluent(connected, default_initial_value=False)
-    problem.ma_environment.add_fluent(free, default_initial_value=False)
+    problem.ma_environment.add_fluent(free, default_initial_value=True)
 
     intersection_map = {
         "north": ["south-ent", "cross-se", "cross-ne", "north-ex"],
@@ -171,6 +171,9 @@ def get_example_problems():
     directions = list(map(lambda d: unified_planning.model.Object(d, direction), direction_names))
     problem.add_objects(directions)
 
+    for d, l in intersection_map.items():
+        for i in range(len(l)-1):            
+            problem.set_initial_value(connected(unified_planning.model.Object(l[i], loc), unified_planning.model.Object(l[i+1], loc), unified_planning.model.Object(d, direction)), True)
 
     # Agents
     car1 = Agent("car1", problem)
@@ -272,9 +275,9 @@ def get_example_problems():
         dobj = unified_planning.model.Object(d, direction)
 
 
-        problem.set_initial_value(car.fluent("start")(slobj), True)
-        problem.set_initial_value(car.fluent("traveldirection")(dobj), True)
-        problem.add_goal(car.fluent("at")(globj))
+        problem.set_initial_value(Dot(car, car.fluent("start")(slobj)), True)
+        problem.set_initial_value(Dot(car, car.fluent("traveldirection")(dobj)), True)        
+        problem.add_goal(Dot(car, car.fluent("at")(globj)))
 
         slobjexp1 = (ObjectExp(slobj)),        
         plan.actions.append(up.plans.ActionInstance(arrive, slobjexp1, car))
