@@ -120,10 +120,13 @@ class SingleAgentProjection(engines.engine.Engine, CompilerMixin):
             else:
                 new_problem.add_fluent(fluent)
 
-        eiv = problem.initial_values
-        #TODO: get initial values for fluents of the selected agent only...
+        eiv = problem.explicit_initial_values     
         for fluent in eiv:
-            new_problem.set_initial_value(fluent, eiv[fluent])
+            if fluent.is_dot():
+                if fluent.agent() == self.agent:
+                    new_problem.set_initial_value(fluent.args[0], eiv[fluent])
+            else:
+                new_problem.set_initial_value(fluent, eiv[fluent])
             
 
         for action in self.agent.actions:            
@@ -136,7 +139,11 @@ class SingleAgentProjection(engines.engine.Engine, CompilerMixin):
 
         # TODO: add agent goals when these are available
         for goal in problem.goals:
-            new_problem.add_goal(goal)            
+            if goal.is_dot():
+                if goal.agent() == self.agent:
+                    new_problem.add_goal(goal.args[0])            
+            else:
+                new_problem.add_goal(goal)            
 
         return CompilerResult(
             new_problem, partial(replace_action, map=new_to_old), self.name
