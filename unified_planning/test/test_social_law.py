@@ -18,6 +18,8 @@ from unified_planning.shortcuts import *
 from unified_planning.test import TestCase, main
 from unified_planning.test.examples.multi_agent import get_example_problems
 from unified_planning.social_law.single_agent_projection import SingleAgentProjection
+from unified_planning.social_law.robustness_verification import InstantaneousActionRobustnessVerifier
+from unified_planning.engines.compilers import NegativeConditionsRemover
 from unified_planning.model.multi_agent import *
 from unified_planning.io import PDDLWriter
 
@@ -32,7 +34,18 @@ class TestProblem(TestCase):
         sap = SingleAgentProjection(problem.agents[0])        
         result = sap.compile(problem)
 
-        w = PDDLWriter(result.problem)
+        #with OneshotPlanner(problem_kind=result.problem.kind) as planner:
+        #    presult = planner.solve(result.problem)
+        #    self.assertTrue(presult.status in unified_planning.engines.results.POSITIVE_OUTCOMES)
+        
+
+    def test_intersection_robustness_verification(self):
+        problem = self.problems["intersection"].problem
+
+        rbv = InstantaneousActionRobustnessVerifier()
+        rbv_result = rbv.compile(problem)
+
+        w = PDDLWriter(rbv_result.problem)
 
         f = open("domain.pddl", "w")
         f.write(w.get_domain())
@@ -41,5 +54,6 @@ class TestProblem(TestCase):
         f = open("problem.pddl", "w")
         f.write(w.get_problem())
         f.close()
+
 
         
