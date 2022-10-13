@@ -84,20 +84,17 @@ class TestProblem(TestCase):
         rbv.waitfor_specification = wfr
         rbv_result = rbv.compile(problem)
 
-        w = PDDLWriter(rbv_result.problem)
-        w.write_domain("domain.pddl")
-        w.write_problem("problem.pddl")
+        # w = PDDLWriter(rbv_result.problem)
+        # w.write_domain("domain.pddl")
+        # w.write_problem("problem.pddl")
 
-        f = open("waitfor.json", "w")
-        f.write(str(rbv.waitfor_specification))
-        f.close()
+        # f = open("waitfor.json", "w")
+        # f.write(str(rbv.waitfor_specification))
+        # f.close()
 
-        with OneshotPlanner(name='fast-downward') as planner:
-            result = planner.solve(rbv_result.problem)
-            self.assertTrue(result.status in POSITIVE_OUTCOMES)       
-
-
- 
+        # with OneshotPlanner(name='fast-downward') as planner:
+        #     result = planner.solve(rbv_result.problem)
+        #     self.assertTrue(result.status in POSITIVE_OUTCOMES)       
 
 
     def test_intersection_robustness_verification_4cars_deadlock(self):
