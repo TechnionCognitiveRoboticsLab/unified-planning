@@ -18,7 +18,7 @@ from unified_planning.shortcuts import *
 from unified_planning.test import TestCase, main
 from unified_planning.test.examples.multi_agent import get_example_problems, get_intersection_problem
 from unified_planning.social_law.single_agent_projection import SingleAgentProjection
-from unified_planning.social_law.robustness_verification import InstantaneousActionRobustnessVerifier
+from unified_planning.social_law.robustness_verification import SimpleInstantaneousActionRobustnessVerifier, WaitingActionRobustnessVerifier
 from unified_planning.social_law.waitfor_specification import WaitforSpecification
 from unified_planning.model.multi_agent import *
 from unified_planning.io import PDDLWriter
@@ -54,6 +54,100 @@ class TestProblem(TestCase):
             result = planner.solve(result.problem)
             self.assertTrue(result.status in POSITIVE_OUTCOMES)
         
+    def test_intersection_robustness_verification_4cars_robust_simple(self):
+        problem = get_intersection_problem(yields_list=[("south-ent", "cross-ne"),("north-ent", "cross-sw"),("east-ent", "cross-nw"),("west-ent", "cross-se")]).problem
+
+        wfr = WaitforSpecification()
+        for agent in problem.agents:
+            drive = agent.action("drive")    
+            wfr.annotate_as_waitfor(agent.name, drive.name, drive.preconditions[1])        
+            wfr.annotate_as_waitfor(agent.name, drive.name, drive.preconditions[5])        
+
+        rbv = SimpleInstantaneousActionRobustnessVerifier()
+        rbv.waitfor_specification = wfr
+        rbv_result = rbv.compile(problem)
+
+        with OneshotPlanner(name='fast-downward') as planner:
+            result = planner.solve(rbv_result.problem)
+            self.assertTrue(result.status in UNSOLVABLE_OUTCOMES)        
+
+    def test_intersection_robustness_verification_4cars_yield_deadlock_simple(self):
+        problem = get_intersection_problem(yields_list=[("south-ent", "east-ent"),("east-ent", "north-ent"),("north-ent", "west-ent"),("west-ent", "south-ent")]).problem
+
+        wfr = WaitforSpecification()
+        for agent in problem.agents:
+            drive = agent.action("drive")    
+            wfr.annotate_as_waitfor(agent.name, drive.name, drive.preconditions[1])        
+            wfr.annotate_as_waitfor(agent.name, drive.name, drive.preconditions[5])        
+
+        rbv = SimpleInstantaneousActionRobustnessVerifier()
+        rbv.waitfor_specification = wfr
+        rbv_result = rbv.compile(problem)
+
+        w = PDDLWriter(rbv_result.problem)
+        w.write_domain("domain.pddl")
+        w.write_problem("problem.pddl")
+
+        f = open("waitfor.json", "w")
+        f.write(str(rbv.waitfor_specification))
+        f.close()
+
+        with OneshotPlanner(name='fast-downward') as planner:
+            result = planner.solve(rbv_result.problem)
+            self.assertTrue(result.status in POSITIVE_OUTCOMES)       
+
+
+    def test_intersection_robustness_verification_4cars_deadlock_simple(self):
+        problem = get_intersection_problem().problem
+
+        wfr = WaitforSpecification()
+        for agent in problem.agents:
+            drive = agent.action("drive")    
+            wfr.annotate_as_waitfor(agent.name, drive.name, drive.preconditions[1])        
+
+        rbv = SimpleInstantaneousActionRobustnessVerifier()
+        rbv.waitfor_specification = wfr
+        rbv_result = rbv.compile(problem)
+
+        with OneshotPlanner(name='fast-downward') as planner:
+            result = planner.solve(rbv_result.problem)
+            self.assertTrue(result.status in POSITIVE_OUTCOMES)
+        
+    def test_intersection_robustness_verification_4cars_crash_simple(self):
+        problem = get_intersection_problem().problem
+
+        rbv = SimpleInstantaneousActionRobustnessVerifier()
+        rbv_result = rbv.compile(problem)
+
+        with OneshotPlanner(name='fast-downward') as planner:
+            result = planner.solve(rbv_result.problem)
+            self.assertTrue(result.status in POSITIVE_OUTCOMES)
+
+    def test_intersection_robustness_verification_2cars_crash_simple(self):
+        problem = get_intersection_problem(["car-north", "car-east"]).problem
+  
+        rbv = SimpleInstantaneousActionRobustnessVerifier()
+        rbv_result = rbv.compile(problem)
+
+        with OneshotPlanner(name='fast-downward') as planner:
+            result = planner.solve(rbv_result.problem)
+            self.assertTrue(result.status in POSITIVE_OUTCOMES)            
+        
+    def test_intersection_robustness_verification_2cars_robust_simple(self):
+        problem = get_intersection_problem(["car-north", "car-south"]).problem
+  
+        rbv = SimpleInstantaneousActionRobustnessVerifier()
+        rbv_result = rbv.compile(problem)
+
+        with OneshotPlanner(name='fast-downward') as planner:
+            result = planner.solve(rbv_result.problem)
+            self.assertTrue(result.status in UNSOLVABLE_OUTCOMES)
+
+
+
+#######################################################################################
+
+
     def test_intersection_robustness_verification_4cars_robust(self):
         problem = get_intersection_problem(yields_list=[("south-ent", "cross-ne"),("north-ent", "cross-sw"),("east-ent", "cross-nw"),("west-ent", "cross-se")]).problem
 
@@ -63,7 +157,7 @@ class TestProblem(TestCase):
             wfr.annotate_as_waitfor(agent.name, drive.name, drive.preconditions[1])        
             wfr.annotate_as_waitfor(agent.name, drive.name, drive.preconditions[5])        
 
-        rbv = InstantaneousActionRobustnessVerifier()
+        rbv = WaitingActionRobustnessVerifier()
         rbv.waitfor_specification = wfr
         rbv_result = rbv.compile(problem)
 
@@ -80,21 +174,21 @@ class TestProblem(TestCase):
             wfr.annotate_as_waitfor(agent.name, drive.name, drive.preconditions[1])        
             wfr.annotate_as_waitfor(agent.name, drive.name, drive.preconditions[5])        
 
-        rbv = InstantaneousActionRobustnessVerifier()
+        rbv = WaitingActionRobustnessVerifier()
         rbv.waitfor_specification = wfr
         rbv_result = rbv.compile(problem)
 
-        # w = PDDLWriter(rbv_result.problem)
-        # w.write_domain("domain.pddl")
-        # w.write_problem("problem.pddl")
+        w = PDDLWriter(rbv_result.problem)
+        w.write_domain("domain.pddl")
+        w.write_problem("problem.pddl")
 
-        # f = open("waitfor.json", "w")
-        # f.write(str(rbv.waitfor_specification))
-        # f.close()
+        f = open("waitfor.json", "w")
+        f.write(str(rbv.waitfor_specification))
+        f.close()
 
-        # with OneshotPlanner(name='fast-downward') as planner:
-        #     result = planner.solve(rbv_result.problem)
-        #     self.assertTrue(result.status in POSITIVE_OUTCOMES)       
+        with OneshotPlanner(name='fast-downward') as planner:
+            result = planner.solve(rbv_result.problem)
+            self.assertTrue(result.status in POSITIVE_OUTCOMES)       
 
 
     def test_intersection_robustness_verification_4cars_deadlock(self):
@@ -105,7 +199,7 @@ class TestProblem(TestCase):
             drive = agent.action("drive")    
             wfr.annotate_as_waitfor(agent.name, drive.name, drive.preconditions[1])        
 
-        rbv = InstantaneousActionRobustnessVerifier()
+        rbv = WaitingActionRobustnessVerifier()
         rbv.waitfor_specification = wfr
         rbv_result = rbv.compile(problem)
 
@@ -116,7 +210,7 @@ class TestProblem(TestCase):
     def test_intersection_robustness_verification_4cars_crash(self):
         problem = get_intersection_problem().problem
 
-        rbv = InstantaneousActionRobustnessVerifier()
+        rbv = WaitingActionRobustnessVerifier()
         rbv_result = rbv.compile(problem)
 
         with OneshotPlanner(name='fast-downward') as planner:
@@ -126,7 +220,7 @@ class TestProblem(TestCase):
     def test_intersection_robustness_verification_2cars_crash(self):
         problem = get_intersection_problem(["car-north", "car-east"]).problem
   
-        rbv = InstantaneousActionRobustnessVerifier()
+        rbv = WaitingActionRobustnessVerifier()
         rbv_result = rbv.compile(problem)
 
         with OneshotPlanner(name='fast-downward') as planner:
@@ -136,7 +230,7 @@ class TestProblem(TestCase):
     def test_intersection_robustness_verification_2cars_robust(self):
         problem = get_intersection_problem(["car-north", "car-south"]).problem
   
-        rbv = InstantaneousActionRobustnessVerifier()
+        rbv = WaitingActionRobustnessVerifier()
         rbv_result = rbv.compile(problem)
 
         with OneshotPlanner(name='fast-downward') as planner:

@@ -14,6 +14,9 @@
 #
 """This module defines the robustness verification compiler classes"""
 
+#TODO - make sure handling of agent specific facts in goals (.args[0]) is correct
+
+
 import unified_planning as up
 import unified_planning.engines as engines
 from unified_planning.engines.mixins.compiler import CompilationKind, CompilerMixin
@@ -229,20 +232,21 @@ class InstantaneousActionRobustnessVerifier(RobustnessVerifier):
         for p in action.parameters:
             d[p.name] = p.type
 
-        new_action = InstantaneousAction(action.name + suffix, _parameters=d)
-        new_action.add_precondition(self.act_pred)
-        # TODO: can probably do this better with a substitution walker
-        for fact in action.preconditions:
-            if fact.is_and():
-                for f in fact.args:
-                    new_action.add_precondition(self.local_fluent_map[agent].get_correct_version(agent, f))
-            else:
-                new_action.add_precondition(self.local_fluent_map[agent].get_correct_version(agent, fact))
+        new_action = InstantaneousAction(action.name + suffix, _parameters=d)        
+        for fact in self.get_action_preconditions(agent, action, True, True):
+            new_action.add_precondition(self.local_fluent_map[agent].get_correct_version(agent, fact))
         for effect in action.effects:
             new_action.add_effect(self.local_fluent_map[agent].get_correct_version(agent, effect.fluent), effect.value)
 
         return new_action
 
+class SimpleInstantaneousActionRobustnessVerifier(InstantaneousActionRobustnessVerifier):
+    '''Robustness verifier class for instanteanous actions using alternative formulation:
+    this class requires a (multi agent) problem, and creates a classical planning problem which is unsolvable iff the multi agent problem is not robust.
+    Implements the robustness verification compilation from Nir, Shleyfman, Karpas limited to propositions with the bugs fixed
+    '''
+    def __init__(self):
+        InstantaneousActionRobustnessVerifier.__init__(self)
 
     def _compile(self, problem: "up.model.AbstractProblem", compilation_kind: "up.engines.CompilationKind") -> CompilerResult:
         '''Creates a the robustness verification problem.'''
@@ -262,7 +266,7 @@ class InstantaneousActionRobustnessVerifier(RobustnessVerifier):
         fin = Fluent("fin", _signature=[Parameter("a", self.agent_type)])
         waiting = Fluent("waiting", _signature=[Parameter("a", self.agent_type)])
 
-        self.act_pred = act
+        act_pred = act
 
         new_problem.add_fluent(failure, default_initial_value=False)
         new_problem.add_fluent(crash, default_initial_value=False)
@@ -312,6 +316,7 @@ class InstantaneousActionRobustnessVerifier(RobustnessVerifier):
                 # Fail version
                 for i, fact in enumerate(real_preconds):
                     a_f = self.create_action_copy(agent, action, "_f_" + agent.name + "_" + str(i))
+                    a_f.add_precondition(act_pred)
                     a_f.add_precondition(Not(waiting(self.get_agent_obj(agent))))
                     a_f.add_precondition(Not(crash))                    
                     for pre in self.waitfor_specification.get_preconditions_wait(agent.name, action.name):
@@ -323,7 +328,8 @@ class InstantaneousActionRobustnessVerifier(RobustnessVerifier):
 
                 # Wait version                
                 for i, fact in enumerate(self.waitfor_specification.get_preconditions_wait(agent.name, action.name)): 
-                    a_w = self.create_action_copy(agent, action, "_w_" + agent.name + str(i))
+                    a_w = self.create_action_copy(agent, action, "_w_" + agent.name + "_" + str(i))
+                    a_w.add_precondition(act_pred)
                     a_w.add_precondition(Not(crash))
                     a_w.add_precondition(Not(waiting(self.get_agent_obj(agent))))
                     a_w.add_precondition(Not(self.global_fluent_map.get_correct_version(agent,fact)))
@@ -335,11 +341,13 @@ class InstantaneousActionRobustnessVerifier(RobustnessVerifier):
 
                 # Phantom version            
                 a_pc = self.create_action_copy(agent, action, "_pc_" + agent.name)
+                a_pc.add_precondition(act_pred)
                 a_pc.add_precondition(crash)
                 new_problem.add_action(a_pc)
 
                 # Phantom version            
                 a_pw = self.create_action_copy(agent, action, "_pw_" + agent.name)
+                a_pw.add_precondition(act_pred)
                 a_pw.add_precondition(waiting(self.get_agent_obj(agent)))
                 new_problem.add_action(a_pw)
 
@@ -363,3 +371,173 @@ class InstantaneousActionRobustnessVerifier(RobustnessVerifier):
         return CompilerResult(
             new_problem, partial(replace_action, map=new_to_old), self.name
         )
+
+
+class WaitingActionRobustnessVerifier(InstantaneousActionRobustnessVerifier):
+    '''Robustness verifier class for instanteanous actions using alternative formulation:
+    this class requires a (multi agent) problem, and creates a classical planning problem which is unsolvable iff the multi agent problem is not robust.
+    Implements the robustness verification compilation from Tuisov, Shleyfman, Karpas with the bugs fixed
+    '''
+    def __init__(self):
+        InstantaneousActionRobustnessVerifier.__init__(self)
+
+    def _compile(self, problem: "up.model.AbstractProblem", compilation_kind: "up.engines.CompilationKind") -> CompilerResult:
+        '''Creates a the robustness verification problem.'''
+
+        #Represents the map from the new action to the old action
+        new_to_old: Dict[Action, Action] = {}
+        
+        new_problem = self.initialize_problem(problem)
+
+        self.waiting_fluent_map = FluentMap("w", default_value=False)
+        self.waiting_fluent_map.add_facts(problem, new_problem)
+
+        # Add fluents
+        stage_1 = Fluent("stage 1")
+        stage_2 = Fluent("stage 2")
+        precondition_violation = Fluent("precondition violation")
+        possible_deadlock = Fluent("possible deadlock")
+        conflict = Fluent("conflict")
+        fin = Fluent("fin", _signature=[Parameter("a", self.agent_type)])
+
+        new_problem.add_fluent(stage_1, default_initial_value=False)
+        new_problem.add_fluent(stage_2, default_initial_value=False)
+        new_problem.add_fluent(precondition_violation, default_initial_value=False)
+        new_problem.add_fluent(possible_deadlock, default_initial_value=False)
+        new_problem.add_fluent(conflict, default_initial_value=False)
+        new_problem.add_fluent(fin, default_initial_value=False)
+
+        allow_action_map = {}
+        for agent in problem.agents:
+            for action in agent.actions:
+                action_fluent = Fluent("allow-" + agent.name + "-" + action.name)
+                # allow_action_map.setdefault(action.agent, {}).update(action=action_fluent)
+                if agent.name not in allow_action_map.keys():
+                    allow_action_map[agent.name] = {action.name: action_fluent}
+                else:
+                    allow_action_map[agent.name][action.name] = action_fluent
+                new_problem.add_fluent(action_fluent, default_initial_value=True)
+
+        # Add actions
+        for agent in problem.agents:
+            for action in agent.actions:            
+                # Success version - affects globals same way as original
+                a_s = self.create_action_copy(agent, action, "_s_" + agent.name)
+                a_s.add_precondition(stage_1)
+                a_s.add_precondition(allow_action_map[agent.name][action.name])
+                for fact in self.get_action_preconditions(agent, action, True, True):
+                    a_s.add_precondition(self.global_fluent_map.get_correct_version(agent, fact))
+                for effect in action.effects:
+                    a_s.add_effect(self.global_fluent_map.get_correct_version(agent, effect.fluent), effect.value)
+                new_problem.add_action(a_s)
+
+                # Fail version
+                for i, fact in enumerate(self.get_action_preconditions(agent, action, True, False)):
+                    a_f = self.create_action_copy(agent, action, "_f_" + agent.name + "_" + str(i))
+                    a_f.add_precondition(stage_1)
+                    a_f.add_precondition(allow_action_map[agent.name][action.name])
+                    for pre in self.get_action_preconditions(agent, action, False, True):
+                        a_f.add_precondition(self.global_fluent_map.get_correct_version(agent,pre))
+                    a_f.add_precondition(Not(self.global_fluent_map.get_correct_version(agent,fact)))
+                    a_f.add_effect(precondition_violation, True)
+                    a_f.add_effect(stage_2, True)
+                    a_f.add_effect(stage_1, False)
+
+                    new_problem.add_action(a_f)
+
+                for i, fact in enumerate(self.get_action_preconditions(agent, action, False, True)):
+                    # Wait version
+                    a_w = self.create_action_copy(agent, action, "_w_" + agent.name + "_" + str(i))
+                    a_s.add_precondition(stage_1)
+                    a_s.add_precondition(allow_action_map[agent.name][action.name])
+                    a_w.add_precondition(Not(self.global_fluent_map.get_correct_version(agent,fact)))
+                    assert not fact.is_not()
+                    a_w.add_effect(self.waiting_fluent_map.get_correct_version(agent,fact), True)  # , action.agent.obj), True)
+                    new_problem.add_action(a_w)
+
+                    # deadlock version
+                    a_deadlock = self.create_action_copy(agent, action, "_deadlock_" + agent.name + "_" + str(i))
+                    a_deadlock.add_precondition(Not(self.global_fluent_map.get_correct_version(agent,fact)))
+                    for another_action in allow_action_map[agent.name].keys():
+                        a_deadlock.add_precondition(Not(allow_action_map[agent.name][another_action]))
+                    a_deadlock.add_effect(fin(self.get_agent_obj(agent)), True)
+                    a_deadlock.add_effect(possible_deadlock, True)
+                    new_problem.add_action(a_deadlock)
+                
+                # local version
+                a_local = self.create_action_copy(agent, action, "_local_" + agent.name)
+                a_local.add_precondition(stage_2)
+                a_local.add_precondition(allow_action_map[agent.name][action.name])
+                for fluent in allow_action_map[agent.name].values():                    
+                    a_local.add_effect(fluent, True)
+                new_problem.add_action(a_local)
+
+            #end-success        
+            end_s = InstantaneousAction("end_s_" + agent.name)
+            for goal in self.get_agent_goal(problem, agent):
+                end_s.add_precondition(self.global_fluent_map.get_correct_version(agent, goal.args[0]))
+                end_s.add_precondition(self.local_fluent_map[agent].get_correct_version(agent, goal.args[0]))
+            end_s.add_effect(fin(self.get_agent_obj(agent)), True)
+            end_s.add_effect(stage_1, False)
+            new_problem.add_action(end_s)
+
+        # start-stage-2
+        start_stage_2 = InstantaneousAction("start_stage_2")
+        for agent in problem.agents:
+            start_stage_2.add_precondition(fin(self.get_agent_obj(agent)))
+        start_stage_2.add_effect(stage_2, True)
+        start_stage_2.add_effect(stage_1, False)
+        new_problem.add_action(start_stage_2)
+
+        # goals_not_achieved
+        goals_not_achieved = InstantaneousAction("goals_not_achieved")
+        goals_not_achieved.add_precondition(stage_2)
+        for agent in problem.agents:
+            for i, goal in enumerate(self.get_agent_goal(problem, agent)):
+                goals_not_achieved.add_precondition(Not(self.global_fluent_map.get_correct_version(agent, goal.args[0])))
+                for g in self.get_agent_goal(problem, agent):
+                    goals_not_achieved.add_precondition(self.local_fluent_map[agent].get_correct_version(agent, g.args[0]))
+        goals_not_achieved.add_effect(conflict, True)
+        new_problem.add_action(goals_not_achieved)
+
+        # declare_deadlock
+        declare_deadlock = InstantaneousAction("declare_deadlock")
+        declare_deadlock.add_precondition(stage_2)
+        declare_deadlock.add_precondition(possible_deadlock)
+        for agent in problem.agents:
+            for i, goal in enumerate(self.get_agent_goal(problem, agent)):
+                for g in self.get_agent_goal(problem, agent):
+                    declare_deadlock.add_precondition(self.local_fluent_map[agent].get_correct_version(agent, g.args[0]))
+        declare_deadlock.add_effect(conflict, True)
+        new_problem.add_action(declare_deadlock)
+
+        # declare_fail
+        declare_fail = InstantaneousAction("declare_fail")
+        declare_fail.add_precondition(stage_2)
+        declare_fail.add_precondition(precondition_violation)
+        for agent in problem.agents:
+            for i, goal in enumerate(self.get_agent_goal(problem, agent)):
+                for g in self.get_agent_goal(problem, agent):
+                    declare_fail.add_precondition(self.local_fluent_map[agent].get_correct_version(agent, g.args[0]))
+        declare_fail.add_effect(conflict, True)
+        new_problem.add_action(declare_fail)
+                
+
+        # Initial state
+        eiv = problem.explicit_initial_values     
+        for fluent in eiv:
+            if fluent.is_dot():                
+                new_problem.set_initial_value(self.global_fluent_map.get_correct_version(fluent.agent(), fluent.args[0]), eiv[fluent])
+                for a in problem.agents:
+                    new_problem.set_initial_value(self.local_fluent_map[a].get_correct_version(fluent.agent(), fluent.args[0]), eiv[fluent])
+            else:
+                new_problem.set_initial_value(self.global_fluent_map.get_environment_version(fluent), eiv[fluent])
+                for a in problem.agents:
+                    new_problem.set_initial_value(self.local_fluent_map[a].get_environment_version(fluent), eiv[fluent])
+
+        # Goal
+        new_problem.add_goal(conflict)
+
+        return CompilerResult(
+            new_problem, partial(replace_action, map=new_to_old), self.name
+        )        
