@@ -61,6 +61,7 @@ class TestProblem(TestCase):
         for agent in problem.agents:
             drive = agent.action("drive")    
             wfr.annotate_as_waitfor(agent.name, drive.name, drive.preconditions[1])        
+            wfr.annotate_as_waitfor(agent.name, drive.name, drive.preconditions[5])        
 
         rbv = InstantaneousActionRobustnessVerifier()
         rbv.waitfor_specification = wfr
@@ -77,14 +78,26 @@ class TestProblem(TestCase):
         for agent in problem.agents:
             drive = agent.action("drive")    
             wfr.annotate_as_waitfor(agent.name, drive.name, drive.preconditions[1])        
+            wfr.annotate_as_waitfor(agent.name, drive.name, drive.preconditions[5])        
 
         rbv = InstantaneousActionRobustnessVerifier()
         rbv.waitfor_specification = wfr
         rbv_result = rbv.compile(problem)
 
+        w = PDDLWriter(rbv_result.problem)
+        w.write_domain("domain.pddl")
+        w.write_problem("problem.pddl")
+
+        f = open("waitfor.json", "w")
+        f.write(str(rbv.waitfor_specification))
+        f.close()
+
         with OneshotPlanner(name='fast-downward') as planner:
             result = planner.solve(rbv_result.problem)
             self.assertTrue(result.status in POSITIVE_OUTCOMES)       
+
+
+ 
 
 
     def test_intersection_robustness_verification_4cars_deadlock(self):

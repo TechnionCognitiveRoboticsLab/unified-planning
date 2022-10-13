@@ -154,6 +154,8 @@ def get_intersection_problem(cars = ["car-north", "car-south", "car-east", "car-
     if len(yields_list) > 0:
         yieldsto = Fluent('yieldsto', BoolType(), l1=loc, l2=loc)
         problem.ma_environment.add_fluent(yieldsto, default_initial_value=False)
+        dummy_loc = unified_planning.model.Object("dummy", loc)
+        problem.add_object(dummy_loc)
     
     problem.ma_environment.add_fluent(connected, default_initial_value=False)
     problem.ma_environment.add_fluent(free, default_initial_value=True)
@@ -283,8 +285,13 @@ def get_intersection_problem(cars = ["car-north", "car-south", "car-east", "car-
             problem.add_goal(Dot(car, car.fluent("at")(globj)))
 
             if len(yields_list) > 0:
+                yields = set()
                 for l1_name, ly_name in yields_list:
                     problem.set_initial_value(yieldsto(problem.object(l1_name), problem.object(ly_name)), True)     
+                    yields.add(problem.object(l1_name))
+                for l1 in problem.objects(loc):
+                    if l1 not in yields:
+                        problem.set_initial_value(yieldsto(l1, dummy_loc), True)        
 
             # slobjexp1 = (ObjectExp(slobj)),        
             # plan.actions.append(up.plans.ActionInstance(arrive, slobjexp1, car))
