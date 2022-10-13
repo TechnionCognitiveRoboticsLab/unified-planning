@@ -19,7 +19,7 @@ from unified_planning.test import TestCase, main
 from unified_planning.test.examples.multi_agent import get_example_problems
 from unified_planning.social_law.single_agent_projection import SingleAgentProjection
 from unified_planning.social_law.robustness_verification import InstantaneousActionRobustnessVerifier
-from unified_planning.engines.compilers import NegativeConditionsRemover
+from unified_planning.social_law.waitfor_specification import WaitforSpecification
 from unified_planning.model.multi_agent import *
 from unified_planning.io import PDDLWriter
 
@@ -42,8 +42,22 @@ class TestProblem(TestCase):
     def test_intersection_robustness_verification(self):
         problem = self.problems["intersection"].problem
 
+        
+
+
+        wfr = WaitforSpecification()
+        for agent in problem.agents:
+            drive = agent.action("drive")    
+            wfr.annotate_as_waitfor(agent.name, drive.name, drive.preconditions[1])        
+
         rbv = InstantaneousActionRobustnessVerifier()
+        rbv.waitfor_specification = wfr
         rbv_result = rbv.compile(problem)
+        
+        f = open("waitfor.json", "w")
+        f.write(str(rbv.waitfor_specification))
+        f.close()
+
 
         w = PDDLWriter(rbv_result.problem)
 

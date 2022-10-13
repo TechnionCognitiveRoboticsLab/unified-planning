@@ -32,13 +32,20 @@ from unified_planning.model import Problem, InstantaneousAction, DurativeAction,
 from typing import List, Dict
 from itertools import product
 
+from unified_planning.social_law.waitfor_specification import WaitforSpecification
+
 
 class FluentMap():
-    """ This class maintains a copy of each fluent in the given problem (environment and agent specific)"""
-    def __init__(self, prefix: str):
+    """ This class maintains a copy of each fluent in the given problem (environment and agent specific). Default value (if specified) is the default value for the new facts."""
+    def __init__(self, prefix: str, default_value = None):
         self.prefix = prefix
         self.env_fluent_map = {}
         self.agent_fluent_map = {}
+        self._default_value = default_value
+
+    @property
+    def default_value(self):
+        return self._default_value
 
     def get_environment_version(self, fact):
         """get a copy of given environment fact
@@ -85,15 +92,21 @@ class FluentMap():
         # Add copy for each fact
         for f in problem.ma_environment.fluents:
             g_fluent = Fluent(self.prefix + "-" + f.name, f.type, f.signature)            
-            self.env_fluent_map[f.name] = g_fluent        
-            default_val = problem.ma_environment.fluents_defaults[f]    
+            self.env_fluent_map[f.name] = g_fluent   
+            if self.default_value is None:
+                default_val = problem.ma_environment.fluents_defaults[f]    
+            else:
+                default_val = self.default_value
             new_problem.add_fluent(g_fluent, default_initial_value=default_val)            
 
         for agent in problem.agents:
             for f in agent.fluents:
                 g_fluent = Fluent(self.prefix + "-" + agent.name + "-" + f.name, f.type, f.signature)                
                 self.agent_fluent_map[agent.name, f.name] = g_fluent      
-                default_val = agent.fluents_defaults[f]          
+                if self.default_value is None:
+                    default_val = agent.fluents_defaults[f]          
+                else:
+                    default_val = self.default_value
                 new_problem.add_fluent(g_fluent, default_initial_value=default_val)                
 
     
@@ -104,12 +117,21 @@ class RobustnessVerifier(engines.engine.Engine, CompilerMixin):
     def __init__(self):
         engines.engine.Engine.__init__(self)
         CompilerMixin.__init__(self, CompilationKind.MA_SL_ROBUSTNESS_VERIFICATION)
-        self.act_pred = None
+        self.act_pred = None        
+        self._waitfor_specification = WaitforSpecification()
         
     @property
     def name(self):
         return "rbv"
 
+    @property
+    def waitfor_specification(self) -> WaitforSpecification:
+        return self._waitfor_specification
+
+    @waitfor_specification.setter
+    def waitfor_specification(self, new_waitfor_specification: WaitforSpecification):        
+        self._waitfor_specification = new_waitfor_specification
+    
     @staticmethod
     def supports_compilation(compilation_kind: CompilationKind) -> bool:
         return compilation_kind == CompilationKind.MA_SL_ROBUSTNESS_VERIFICATION
@@ -123,10 +145,10 @@ class RobustnessVerifier(engines.engine.Engine, CompilerMixin):
         new_kind.unset_problem_class("ACTION_BASED_MULTI_AGENT")
         return new_kind
 
-    def get_agent_obj(self, agent):
+    def get_agent_obj(self, agent : Agent):
         return Object(agent.name, self.agent_type)
 
-    def get_agent_goal(self, problem, agent):
+    def get_agent_goal(self, problem : MultiAgentProblem, agent : Agent):
         """ Returns the individual goal of the given agent"""
         #TODO: update when new API is available
         l = []
@@ -135,6 +157,21 @@ class RobustnessVerifier(engines.engine.Engine, CompilerMixin):
                 l.append(goal)
         return l
 
+    def get_action_preconditions(self, agent : Agent, action : Action, fail : bool, wait: bool) -> List[FNode]:
+        """ Get the preconditions for the given action of the given agent. fail/wait specify which preconditions we want (True to return, False to omit) """
+        assert fail or wait
+        if wait and not fail:
+            return self.waitfor_specification.get_preconditions_wait(agent.name, action.name)
+        else:
+            preconds = []
+            for fact in action.preconditions:
+                if fact.is_and():
+                    if wait or not fact.args in self.waitfor_specification.get_preconditions_wait(agent.name, action.name):
+                        preconds += fact.args
+                else:
+                    if wait or not fact in self.waitfor_specification.get_preconditions_wait(agent.name, action.name):
+                        preconds.append(fact)
+        return preconds
 
 
     def initialize_problem(self, problem):
@@ -215,7 +252,7 @@ class InstantaneousActionRobustnessVerifier(RobustnessVerifier):
         
         new_problem = self.initialize_problem(problem)
 
-        self.waiting_fluent_map = FluentMap("w")
+        self.waiting_fluent_map = FluentMap("w", default_value=False)
         self.waiting_fluent_map.add_facts(problem, new_problem)
 
         # Add fluents
@@ -264,39 +301,28 @@ class InstantaneousActionRobustnessVerifier(RobustnessVerifier):
                 for effect in action.effects:
                     if effect.value.is_true():
                         a_s.add_precondition(Not(self.waiting_fluent_map.get_correct_version(agent, effect.fluent)))
-                for fact in action.preconditions:
-                    if fact.is_and():
-                        for f in fact.args:
-                            a_s.add_precondition(self.global_fluent_map.get_correct_version(agent, f))
-                    else:
-                        a_s.add_precondition(self.global_fluent_map.get_correct_version(agent, fact))
+                for fact in self.get_action_preconditions(agent, action, True, True):
+                    a_s.add_precondition(self.global_fluent_map.get_correct_version(agent, fact))
                 for effect in action.effects:
                     a_s.add_effect(self.global_fluent_map.get_correct_version(agent, effect.fluent), effect.value)
                 new_problem.add_action(a_s)
 
-                real_preconds = []
-                for fact in action.preconditions:
-                    if fact.is_and():
-                        real_preconds += fact.args
-                    else:
-                        real_preconds.append(fact)
+                real_preconds = self.get_action_preconditions(agent, action, fail=True, wait=False)
                 
                 # Fail version
                 for i, fact in enumerate(real_preconds):
                     a_f = self.create_action_copy(agent, action, "_f_" + agent.name + "_" + str(i))
                     a_f.add_precondition(Not(waiting(self.get_agent_obj(agent))))
-                    a_f.add_precondition(Not(crash))
-                    #TODO: get wait preconditions
-                    for pre in action.preconditions:
+                    a_f.add_precondition(Not(crash))                    
+                    for pre in self.waitfor_specification.get_preconditions_wait(agent.name, action.name):
                         a_f.add_precondition(self.global_fluent_map.get_correct_version(agent, pre))
                     a_f.add_precondition(Not(self.global_fluent_map.get_correct_version(agent, fact)))
                     a_f.add_effect(failure, True)
                     a_f.add_effect(crash, True)
                     new_problem.add_action(a_f)
 
-                # Wait version
-                #TODO: get wait preconditions
-                for i, fact in enumerate(action.preconditions):
+                # Wait version                
+                for i, fact in enumerate(self.waitfor_specification.get_preconditions_wait(agent.name, action.name)): 
                     a_w = self.create_action_copy(agent, action, "_w_" + agent.name + str(i))
                     a_w.add_precondition(Not(crash))
                     a_w.add_precondition(Not(waiting(self.get_agent_obj(agent))))
