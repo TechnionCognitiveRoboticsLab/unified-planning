@@ -126,6 +126,17 @@ class RobustnessVerifier(engines.engine.Engine, CompilerMixin):
     def get_agent_obj(self, agent):
         return Object(agent.name, self.agent_type)
 
+    def get_agent_goal(self, problem, agent):
+        """ Returns the individual goal of the given agent"""
+        #TODO: update when new API is available
+        l = []
+        for goal in problem.goals:
+            if goal.is_dot() and goal.agent() == agent:
+                l.append(goal)
+        return l
+
+
+
     def initialize_problem(self, problem):
         new_problem = Problem(f'{self.name}_{problem.name}')
 
@@ -226,30 +237,24 @@ class InstantaneousActionRobustnessVerifier(RobustnessVerifier):
         # Add actions
         for agent in problem.agents:
             end_s = InstantaneousAction("end_s_" + agent.name)
-            end_s.add_precondition(Not(fin(self.get_agent_obj(agent))))
-            #TODO: fix goals
-            for goal in problem.goals:
-                if goal.is_dot() and goal.agent() == agent:
-                    end_s.add_precondition(self.global_fluent_map.get_correct_version(agent, goal.args[0]))
-                    end_s.add_precondition(self.local_fluent_map[agent].get_correct_version(agent, goal.args[0]))
+            end_s.add_precondition(Not(fin(self.get_agent_obj(agent))))            
+            for goal in self.get_agent_goal(problem, agent):
+                end_s.add_precondition(self.global_fluent_map.get_correct_version(agent, goal.args[0]))
+                end_s.add_precondition(self.local_fluent_map[agent].get_correct_version(agent, goal.args[0]))
             end_s.add_effect(fin(self.get_agent_obj(agent)), True)
             end_s.add_effect(act, False)
             new_problem.add_action(end_s)
 
-            for i, goal in enumerate(problem.goals):
-                #TODO: fix goals
-                if goal.is_dot() and goal.agent() == agent:
-                    end_f = InstantaneousAction("end_f_" + agent.name + "_" + str(i))
-                    end_f.add_precondition(Not(fin(self.get_agent_obj(agent))))
-                    end_f.add_precondition(Not(self.global_fluent_map.get_correct_version(agent, goal.args[0])))
-                    #TODO: fix goals
-                    for g in problem.goals:
-                        if g.is_dot() and g.agent() == agent:
-                            end_f.add_precondition(self.local_fluent_map[agent].get_correct_version(agent, g.args[0]))
-                    end_f.add_effect(fin(self.get_agent_obj(agent)), True)
-                    end_f.add_effect(act, False)
-                    end_f.add_effect(failure, True)
-                    new_problem.add_action(end_f)
+            for i, goal in enumerate(self.get_agent_goal(problem, agent)):
+                end_f = InstantaneousAction("end_f_" + agent.name + "_" + str(i))
+                end_f.add_precondition(Not(fin(self.get_agent_obj(agent))))
+                end_f.add_precondition(Not(self.global_fluent_map.get_correct_version(agent, goal.args[0])))
+                for g in self.get_agent_goal(problem, agent):                    
+                    end_f.add_precondition(self.local_fluent_map[agent].get_correct_version(agent, g.args[0]))
+                end_f.add_effect(fin(self.get_agent_obj(agent)), True)
+                end_f.add_effect(act, False)
+                end_f.add_effect(failure, True)
+                new_problem.add_action(end_f)
 
             for action in agent.actions:
                 # Success version - affects globals same way as original
