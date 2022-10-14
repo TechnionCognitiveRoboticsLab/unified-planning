@@ -21,6 +21,7 @@ from unified_planning.social_law.single_agent_projection import SingleAgentProje
 from unified_planning.social_law.robustness_verification import RobustnessVerifier, SimpleInstantaneousActionRobustnessVerifier, WaitingActionRobustnessVerifier
 from unified_planning.social_law.waitfor_specification import WaitforSpecification
 from unified_planning.social_law.ma_problem_waitfor import MultiAgentProblemWithWaitfor
+from unified_planning.social_law.social_law import SocialLawRobustnessChecker, SocialLawRobustnessStatus
 from unified_planning.model.multi_agent import *
 from unified_planning.io import PDDLWriter
 from unified_planning.engines import PlanGenerationResultStatus
@@ -40,69 +41,34 @@ UNSOLVABLE_OUTCOMES = frozenset(
     ]
 )
 
-RobustnessTestCase = namedtuple("RobustnessTestCase", ["name", "cars", "yields_list", "expected_outcome_set"])
 class RobustnessTestCase:
-    def __init__(self, name, cars = ["car-north", "car-south", "car-east", "car-west"], yields_list = [], wait_drive = True, expected_outcome_set = []):
+    def __init__(self, name, expected_outcome : SocialLawRobustnessStatus, cars = ["car-north", "car-south", "car-east", "car-west"], yields_list = [], wait_drive = True):
         self.name = name
         self.cars = cars
         self.yields_list = yields_list
-        self.expected_outcome_set = expected_outcome_set
+        self.expected_outcome = expected_outcome
         self.wait_drive = wait_drive
-
-    def run_test(self, rbv : RobustnessVerifier, test : TestCase):
-        problem = get_intersection_problem(self.cars, self.yields_list).problem
-
-        
-        for agent in problem.agents:
-            drive = agent.action("drive")
-            if self.wait_drive:
-                problem.waitfor.annotate_as_waitfor(agent.name, drive.name, drive.preconditions[1])
-            if len(self.yields_list) > 0:
-                problem.waitfor.annotate_as_waitfor(agent.name, drive.name, drive.preconditions[5])        
-                
-        rbv_result = rbv.compile(problem)
-
-        w = PDDLWriter(rbv_result.problem)
-        w.write_domain(rbv.name + "_" + self.name + "_domain.pddl")
-        w.write_problem(rbv.name + "_" + self.name + "_problem.pddl")
-
-        f = open(rbv.name + "_" + self.name + "_waitfor.json", "w")
-        f.write(str(problem.waitfor))
-        f.close()
-
-        with OneshotPlanner(name='fast-downward') as planner:
-            result = planner.solve(rbv_result.problem)
-            test.assertTrue(result.status in self.expected_outcome_set, self.name)
 
 
 class TestProblem(TestCase):
     def setUp(self):
         TestCase.setUp(self)        
         self.test_cases = [         
-            RobustnessTestCase("4cars_crash", yields_list=[], wait_drive=False, expected_outcome_set=POSITIVE_OUTCOMES),   
-            RobustnessTestCase("4cars_deadlock", yields_list=[], expected_outcome_set=POSITIVE_OUTCOMES),
-            RobustnessTestCase("4cars_yield_deadlock", yields_list=[("south-ent", "east-ent"),("east-ent", "north-ent"),("north-ent", "west-ent"),("west-ent", "south-ent")], expected_outcome_set=POSITIVE_OUTCOMES),
-            RobustnessTestCase("4cars_robust", yields_list=[("south-ent", "cross-ne"),("north-ent", "cross-sw"),("east-ent", "cross-nw"),("west-ent", "cross-se")], expected_outcome_set=UNSOLVABLE_OUTCOMES),
-            RobustnessTestCase("2cars_crash", cars=["car-north", "car-east"], yields_list=[], wait_drive=False, expected_outcome_set=POSITIVE_OUTCOMES),   
-            RobustnessTestCase("2cars_robust", cars=["car-north", "car-south"], yields_list=[], wait_drive=False, expected_outcome_set=UNSOLVABLE_OUTCOMES)            
+            RobustnessTestCase("4cars_crash", SocialLawRobustnessStatus.NON_ROBUST_MULTI_AGENT_FAIL, yields_list=[], wait_drive=False),   
+            RobustnessTestCase("4cars_deadlock", SocialLawRobustnessStatus.NON_ROBUST_MULTI_AGENT_DEADLOCK, yields_list=[]),
+            RobustnessTestCase("4cars_yield_deadlock", SocialLawRobustnessStatus.NON_ROBUST_MULTI_AGENT_DEADLOCK, yields_list=[("south-ent", "east-ent"),("east-ent", "north-ent"),("north-ent", "west-ent"),("west-ent", "south-ent")]),
+            RobustnessTestCase("4cars_robust", SocialLawRobustnessStatus.ROBUST_RATIONAL, yields_list=[("south-ent", "cross-ne"),("north-ent", "cross-sw"),("east-ent", "cross-nw"),("west-ent", "cross-se")]),
+            RobustnessTestCase("2cars_crash", SocialLawRobustnessStatus.NON_ROBUST_MULTI_AGENT_FAIL, cars=["car-north", "car-east"], yields_list=[], wait_drive=False),   
+            RobustnessTestCase("2cars_robust", SocialLawRobustnessStatus.ROBUST_RATIONAL, cars=["car-north", "car-south"], yields_list=[], wait_drive=False)            
         ]
 
     def test_all_cases(self):
         for t in self.test_cases:
-            rbv = SimpleInstantaneousActionRobustnessVerifier()
-            t.run_test(rbv, self)
-            # wrbv = WaitingActionRobustnessVerifier()
-            # t.run_test(wrbv, self)
+            problem = get_intersection_problem(t.cars, t.yields_list, t.wait_drive).problem
+            with open("waitfor.json", "w") as f:
+                f.write(str(problem.waitfor))
 
+            slrc = SocialLawRobustnessChecker(save_pddl=True)
+            self.assertEqual(slrc.is_robust(problem), t.expected_outcome, t.name)
 
-    def test_intersection_single_agent_projection(self):
-        problem = get_intersection_problem().problem
-
-        for agent in problem.agents:
-            sap = SingleAgentProjection(agent)        
-            result = sap.compile(problem)
-
-            with OneshotPlanner(name='fast-downward') as planner:
-                result = planner.solve(result.problem)
-                self.assertTrue(result.status in POSITIVE_OUTCOMES)
-
+            
