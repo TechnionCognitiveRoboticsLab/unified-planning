@@ -20,6 +20,7 @@ from unified_planning.test.examples.multi_agent import get_example_problems, get
 from unified_planning.social_law.single_agent_projection import SingleAgentProjection
 from unified_planning.social_law.robustness_verification import RobustnessVerifier, SimpleInstantaneousActionRobustnessVerifier, WaitingActionRobustnessVerifier
 from unified_planning.social_law.waitfor_specification import WaitforSpecification
+from unified_planning.social_law.ma_problem_waitfor import MultiAgentProblemWithWaitfor
 from unified_planning.model.multi_agent import *
 from unified_planning.io import PDDLWriter
 from unified_planning.engines import PlanGenerationResultStatus
@@ -51,15 +52,14 @@ class RobustnessTestCase:
     def run_test(self, rbv : RobustnessVerifier, test : TestCase):
         problem = get_intersection_problem(self.cars, self.yields_list).problem
 
-        wfr = WaitforSpecification()
+        
         for agent in problem.agents:
             drive = agent.action("drive")
             if self.wait_drive:
-                wfr.annotate_as_waitfor(agent.name, drive.name, drive.preconditions[1])
+                problem.waitfor.annotate_as_waitfor(agent.name, drive.name, drive.preconditions[1])
             if len(self.yields_list) > 0:
-                wfr.annotate_as_waitfor(agent.name, drive.name, drive.preconditions[5])        
-        
-        rbv.waitfor_specification = wfr
+                problem.waitfor.annotate_as_waitfor(agent.name, drive.name, drive.preconditions[5])        
+                
         rbv_result = rbv.compile(problem)
 
         w = PDDLWriter(rbv_result.problem)
@@ -67,7 +67,7 @@ class RobustnessTestCase:
         w.write_problem(rbv.name + "_" + self.name + "_problem.pddl")
 
         f = open(rbv.name + "_" + self.name + "_waitfor.json", "w")
-        f.write(str(rbv.waitfor_specification))
+        f.write(str(problem.waitfor))
         f.close()
 
         with OneshotPlanner(name='fast-downward') as planner:

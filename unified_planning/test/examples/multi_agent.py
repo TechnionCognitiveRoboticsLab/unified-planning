@@ -13,6 +13,7 @@
 # limitations under the License.
 from unified_planning.shortcuts import *
 from unified_planning.model.multi_agent import *
+from unified_planning.social_law.ma_problem_waitfor import MultiAgentProblemWithWaitfor
 from collections import namedtuple
 
 Example = namedtuple("Example", ["problem", "plan"])
@@ -140,9 +141,9 @@ def get_example_problems():
     ma_loader = Example(problem=problem, plan=plan)
     problems["ma-loader"] = ma_loader    
 
-def get_intersection_problem(cars = ["car-north", "car-south", "car-east", "car-west"], yields_list = []):
+def get_intersection_problem(cars = ["car-north", "car-south", "car-east", "car-west"], yields_list = []) -> MultiAgentProblemWithWaitfor:
     # intersection multi agent
-    problem = MultiAgentProblem("intersection")
+    problem = MultiAgentProblemWithWaitfor("intersection")
 
     loc = UserType("loc")
     direction = UserType("direction")
