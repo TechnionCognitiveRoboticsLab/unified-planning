@@ -34,8 +34,19 @@ from unified_planning.exceptions import UPProblemDefinitionError
 from unified_planning.model import Problem, InstantaneousAction, DurativeAction, Action
 from typing import List, Dict
 from itertools import product
-
 from unified_planning.social_law.waitfor_specification import WaitforSpecification
+import unified_planning as up
+from unified_planning.engines import Credits
+
+
+credits = Credits('Robustness Verification',
+                  'Technion Cognitive Robotics Lab (cf. https://github.com/TechnionCognitiveRoboticsLab)',
+                  'karpase@technion.ac.il',
+                  'https://https://cogrob.net.technion.ac.il/',
+                  'Apache License, Version 2.0',
+                  'Creates a planning problem which verifies the robustness of a multi-agent planning problem with given waitfor specification.',
+                  'Creates a planning problem which verifies the robustness of a multi-agent planning problem with given waitfor specification.')
+
 
 
 class FluentMap():
@@ -123,6 +134,10 @@ class RobustnessVerifier(engines.engine.Engine, CompilerMixin):
         self.act_pred = None        
         self._waitfor_specification = WaitforSpecification()
         
+    @staticmethod
+    def get_credits(**kwargs) -> Optional['Credits']:
+        return credits
+
     @property
     def name(self):
         return "rbv"
@@ -247,6 +262,10 @@ class SimpleInstantaneousActionRobustnessVerifier(InstantaneousActionRobustnessV
     '''
     def __init__(self):
         InstantaneousActionRobustnessVerifier.__init__(self)
+
+    @property
+    def name(self):
+        return "srbv"
 
     def _compile(self, problem: "up.model.AbstractProblem", compilation_kind: "up.engines.CompilationKind") -> CompilerResult:
         '''Creates a the robustness verification problem.'''
@@ -380,6 +399,11 @@ class WaitingActionRobustnessVerifier(InstantaneousActionRobustnessVerifier):
     '''
     def __init__(self):
         InstantaneousActionRobustnessVerifier.__init__(self)
+
+    
+    @property
+    def name(self):
+        return "wrbv"
 
     def _compile(self, problem: "up.model.AbstractProblem", compilation_kind: "up.engines.CompilationKind") -> CompilerResult:
         '''Creates a the robustness verification problem.'''
@@ -541,3 +565,7 @@ class WaitingActionRobustnessVerifier(InstantaneousActionRobustnessVerifier):
         return CompilerResult(
             new_problem, partial(replace_action, map=new_to_old), self.name
         )        
+
+env = up.environment.get_env()
+env.factory.add_engine('InstantaneousActionRobustnessVerifier', __name__, 'InstantaneousActionRobustnessVerifier')
+env.factory.add_engine('WaitingActionRobustnessVerifier', __name__, 'WaitingActionRobustnessVerifier')

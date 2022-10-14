@@ -24,6 +24,17 @@ from unified_planning.exceptions import UPExpressionDefinitionError, UPProblemDe
 from typing import List, Dict, Union, Optional
 from unified_planning.engines.compilers.utils import replace_action, get_fresh_name
 from functools import partial
+import unified_planning as up
+
+from unified_planning.engines import Credits
+credits = Credits('Single Agent Projection',
+                  'Technion Cognitive Robotics Lab (cf. https://github.com/TechnionCognitiveRoboticsLab)',
+                  'karpase@technion.ac.il',
+                  'https://https://cogrob.net.technion.ac.il/',
+                  'Apache License, Version 2.0',
+                  'Projects a given multi-agent planning problem into the single agent planning problem of a given agent.',
+                  'Projects a given multi-agent planning problem into the single agent planning problem of a given agent.')
+
 
 class SingleAgentProjection(engines.engine.Engine, CompilerMixin):
     '''Single agent projection class:
@@ -33,10 +44,13 @@ class SingleAgentProjection(engines.engine.Engine, CompilerMixin):
     This is done by only including the actions of the given agent, changing waitfor preconditions to regular preconditions, and setting the goal to the agent's goal.'''
     def __init__(self, agent: Agent):
         engines.engine.Engine.__init__(self)
-        CompilerMixin.__init__(self, CompilationKind.MA_SINGLE_AGENT_PROJECTION)
-                
+        CompilerMixin.__init__(self, CompilationKind.MA_SINGLE_AGENT_PROJECTION)                
         self._agent = agent
         
+    @staticmethod
+    def get_credits(**kwargs) -> Optional['Credits']:
+        return credits
+
     @property
     def name(self):
         return "sap"
@@ -156,3 +170,7 @@ class SingleAgentProjection(engines.engine.Engine, CompilerMixin):
     #     '''After the method get_rewritten_problem is called, this function maps
     #     the actions of the original problem into the actions of the transformed problem.'''
     #     return self._old_to_new[action]
+
+
+env = up.environment.get_env()
+env.factory.add_engine('SingleAgentProjection', __name__, 'SingleAgentProjection')
