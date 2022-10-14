@@ -232,14 +232,14 @@ class InstantaneousActionRobustnessVerifier(RobustnessVerifier):
     def supports(problem_kind):
         return problem_kind <= InstantaneousActionRobustnessVerifier.supported_kind()
 
-    def create_action_copy(self, problem: MultiAgentProblemWithWaitfor, agent : Agent , action : InstantaneousAction, suffix : str):
-        """Create a new copy of an action, with name action_name_suffix, and duplicates the local preconditions/effects
+    def create_action_copy(self, problem: MultiAgentProblemWithWaitfor, agent : Agent , action : InstantaneousAction, prefix : str):
+        """Create a new copy of an action, with name prefix_action_name, and duplicates the local preconditions/effects
         """
         d = {}
         for p in action.parameters:
             d[p.name] = p.type
 
-        new_action = InstantaneousAction(action.name + suffix, _parameters=d)        
+        new_action = InstantaneousAction(prefix + "_" + action.name, _parameters=d)        
         for fact in self.get_action_preconditions(problem, agent, action, True, True):
             new_action.add_precondition(self.local_fluent_map[agent].get_correct_version(agent, fact))
         for effect in action.effects:
@@ -310,7 +310,7 @@ class SimpleInstantaneousActionRobustnessVerifier(InstantaneousActionRobustnessV
 
             for action in agent.actions:
                 # Success version - affects globals same way as original
-                a_s = self.create_action_copy(problem, agent, action, "_s_" + agent.name)
+                a_s = self.create_action_copy(problem, agent, action, "s_" + agent.name)
                 a_s.add_precondition(Not(waiting(self.get_agent_obj(agent))))
                 a_s.add_precondition(Not(crash))
                 for effect in action.effects:
@@ -326,7 +326,7 @@ class SimpleInstantaneousActionRobustnessVerifier(InstantaneousActionRobustnessV
                 
                 # Fail version
                 for i, fact in enumerate(real_preconds):
-                    a_f = self.create_action_copy(problem, agent, action, "_f_" + agent.name + "_" + str(i))
+                    a_f = self.create_action_copy(problem, agent, action, "f_" + agent.name + "_" + str(i))
                     a_f.add_precondition(act_pred)
                     a_f.add_precondition(Not(waiting(self.get_agent_obj(agent))))
                     a_f.add_precondition(Not(crash))                    
@@ -339,7 +339,7 @@ class SimpleInstantaneousActionRobustnessVerifier(InstantaneousActionRobustnessV
 
                 # Wait version                
                 for i, fact in enumerate(self.get_action_preconditions(problem, agent, action, False, True)): 
-                    a_w = self.create_action_copy(problem, agent, action, "_w_" + agent.name + "_" + str(i))
+                    a_w = self.create_action_copy(problem, agent, action, "w_" + agent.name + "_" + str(i))
                     a_w.add_precondition(act_pred)
                     a_w.add_precondition(Not(crash))
                     a_w.add_precondition(Not(waiting(self.get_agent_obj(agent))))
@@ -351,13 +351,13 @@ class SimpleInstantaneousActionRobustnessVerifier(InstantaneousActionRobustnessV
                     new_problem.add_action(a_w)
 
                 # Phantom version            
-                a_pc = self.create_action_copy(problem, agent, action, "_pc_" + agent.name)
+                a_pc = self.create_action_copy(problem, agent, action, "pc_" + agent.name)
                 a_pc.add_precondition(act_pred)
                 a_pc.add_precondition(crash)
                 new_problem.add_action(a_pc)
 
                 # Phantom version            
-                a_pw = self.create_action_copy(problem, agent, action, "_pw_" + agent.name)
+                a_pw = self.create_action_copy(problem, agent, action, "pw_" + agent.name)
                 a_pw.add_precondition(act_pred)
                 a_pw.add_precondition(waiting(self.get_agent_obj(agent)))
                 new_problem.add_action(a_pw)
