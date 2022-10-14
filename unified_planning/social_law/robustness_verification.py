@@ -38,6 +38,7 @@ from unified_planning.social_law.waitfor_specification import WaitforSpecificati
 from unified_planning.social_law.ma_problem_waitfor import MultiAgentProblemWithWaitfor
 import unified_planning as up
 from unified_planning.engines import Credits
+from unified_planning.io.pddl_writer import PDDLWriter
 
 
 credits = Credits('Robustness Verification',
@@ -52,11 +53,12 @@ credits = Credits('Robustness Verification',
 
 class FluentMap():
     """ This class maintains a copy of each fluent in the given problem (environment and agent specific). Default value (if specified) is the default value for the new facts."""
-    def __init__(self, prefix: str, default_value = None):
+    def __init__(self, prefix: str, default_value = None, override_type = None):
         self.prefix = prefix
         self.env_fluent_map = {}
         self.agent_fluent_map = {}
         self._default_value = default_value
+        self._override_type = override_type
 
     @property
     def default_value(self):
@@ -103,10 +105,23 @@ class FluentMap():
         else:
             return self.get_environment_version(fact)
 
+    def create_fluent(self, f, agent=None):
+        if self._override_type is not None:
+            ftype = self._override_type
+        else:
+            ftype = f.type
+        
+        if agent is None:
+            name = self.prefix + "-" + f.name
+        else:
+            name = self.prefix + "-" + agent.name + "-" + f.name
+        g_fluent = Fluent(name, ftype, f.signature)
+        return g_fluent
+
     def add_facts(self, problem, new_problem):
         # Add copy for each fact
         for f in problem.ma_environment.fluents:
-            g_fluent = Fluent(self.prefix + "-" + f.name, f.type, f.signature)            
+            g_fluent = self.create_fluent(f)
             self.env_fluent_map[f.name] = g_fluent   
             if self.default_value is None:
                 default_val = problem.ma_environment.fluents_defaults[f]    
@@ -116,7 +131,7 @@ class FluentMap():
 
         for agent in problem.agents:
             for f in agent.fluents:
-                g_fluent = Fluent(self.prefix + "-" + agent.name + "-" + f.name, f.type, f.signature)                
+                g_fluent = self.create_fluent(f, agent)
                 self.agent_fluent_map[agent.name, f.name] = g_fluent      
                 if self.default_value is None:
                     default_val = agent.fluents_defaults[f]          
@@ -239,7 +254,7 @@ class InstantaneousActionRobustnessVerifier(RobustnessVerifier):
         for p in action.parameters:
             d[p.name] = p.type
 
-        new_action = InstantaneousAction(prefix + "_" + action.name, _parameters=d)        
+        new_action = InstantaneousAction(prefix + "_" + agent.name + "_" + action.name, _parameters=d)        
         for fact in self.get_action_preconditions(problem, agent, action, True, True):
             new_action.add_precondition(self.local_fluent_map[agent].get_correct_version(agent, fact))
         for effect in action.effects:
@@ -310,7 +325,7 @@ class SimpleInstantaneousActionRobustnessVerifier(InstantaneousActionRobustnessV
 
             for action in agent.actions:
                 # Success version - affects globals same way as original
-                a_s = self.create_action_copy(problem, agent, action, "s_" + agent.name)
+                a_s = self.create_action_copy(problem, agent, action, "s")
                 a_s.add_precondition(Not(waiting(self.get_agent_obj(agent))))
                 a_s.add_precondition(Not(crash))
                 for effect in action.effects:
@@ -326,7 +341,7 @@ class SimpleInstantaneousActionRobustnessVerifier(InstantaneousActionRobustnessV
                 
                 # Fail version
                 for i, fact in enumerate(real_preconds):
-                    a_f = self.create_action_copy(problem, agent, action, "f_" + agent.name + "_" + str(i))
+                    a_f = self.create_action_copy(problem, agent, action, "f_" + str(i))
                     a_f.add_precondition(act_pred)
                     a_f.add_precondition(Not(waiting(self.get_agent_obj(agent))))
                     a_f.add_precondition(Not(crash))                    
@@ -339,7 +354,7 @@ class SimpleInstantaneousActionRobustnessVerifier(InstantaneousActionRobustnessV
 
                 # Wait version                
                 for i, fact in enumerate(self.get_action_preconditions(problem, agent, action, False, True)): 
-                    a_w = self.create_action_copy(problem, agent, action, "w_" + agent.name + "_" + str(i))
+                    a_w = self.create_action_copy(problem, agent, action, "w_" + str(i))
                     a_w.add_precondition(act_pred)
                     a_w.add_precondition(Not(crash))
                     a_w.add_precondition(Not(waiting(self.get_agent_obj(agent))))
@@ -351,13 +366,13 @@ class SimpleInstantaneousActionRobustnessVerifier(InstantaneousActionRobustnessV
                     new_problem.add_action(a_w)
 
                 # Phantom version            
-                a_pc = self.create_action_copy(problem, agent, action, "pc_" + agent.name)
+                a_pc = self.create_action_copy(problem, agent, action, "pc")
                 a_pc.add_precondition(act_pred)
                 a_pc.add_precondition(crash)
                 new_problem.add_action(a_pc)
 
                 # Phantom version            
-                a_pw = self.create_action_copy(problem, agent, action, "pw_" + agent.name)
+                a_pw = self.create_action_copy(problem, agent, action, "pw")
                 a_pw.add_precondition(act_pred)
                 a_pw.add_precondition(waiting(self.get_agent_obj(agent)))
                 new_problem.add_action(a_pw)
@@ -558,6 +573,184 @@ class WaitingActionRobustnessVerifier(InstantaneousActionRobustnessVerifier):
             new_problem, partial(replace_action, map=new_to_old), self.name
         )        
 
+class DurativeActionRobustnessVerifier(RobustnessVerifier):
+    '''Robustness verifier class for durative actions:
+    this class requires a (multi agent) problem, and creates a temporal planning problem which is unsolvable iff the multi agent problem is not robust.'''
+    def __init__(self):
+        RobustnessVerifier.__init__(self)
+    
+    @staticmethod
+    def supported_kind() -> ProblemKind:
+        supported_kind = ProblemKind()
+        supported_kind.set_problem_class("ACTION_BASED_MULTI_AGENT")
+        supported_kind.set_typing("FLAT_TYPING")
+        supported_kind.set_typing("HIERARCHICAL_TYPING")
+        supported_kind.set_time("CONTINUOUS_TIME")        
+        supported_kind.set_time("DURATION_INEQUALITIES")
+        supported_kind.set_simulated_entities("SIMULATED_EFFECTS")
+        return supported_kind
+
+    @staticmethod
+    def supports(problem_kind):
+        return problem_kind <= DurativeActionRobustnessVerifier.supported_kind()
+
+    def get_action_conditions(self, problem : MultiAgentProblemWithWaitfor, agent : Agent, action : Action, fail : bool, wait: bool):
+        c_start = []
+        c_overall = []
+        c_end = []
+        assert fail or wait
+        if wait and not fail:
+            # Can only wait for start conditions
+            return (problem.waitfor.get_preconditions_wait(agent.name, action.name), [], [])
+        else:
+            for interval, cl in action.conditions.items():
+                for c in cl:
+                    if interval.lower == interval.upper:
+                        if interval.lower.is_from_start():
+                            if wait or not c in problem.waitfor.get_preconditions_wait(agent.name, action.name):
+                                c_start.append(c)
+                        else:
+                            if fail:
+                                c_end.append(c)
+                    else:
+                        if not interval.is_left_open():
+                            if wait or not c in problem.waitfor.get_preconditions_wait(agent.name, action.name):
+                                c_start.append(c)
+                        if fail:
+                            c_overall.append(c)
+                        if not interval.is_right_open():
+                            if fail:
+                                c_end.append(c)
+        return (c_start, c_overall, c_end)
+
+
+    def create_action_copy(self, problem: MultiAgentProblemWithWaitfor, agent : Agent , action : DurativeAction, prefix : str):
+        """Create a new copy of an action, with name prefix_action_name, and duplicates the local preconditions/effects
+        """
+        d = {}
+        for p in action.parameters:
+            d[p.name] = p.type
+
+        new_action = DurativeAction(prefix + "_" + agent.name + "_" + action.name, _parameters=d)     
+        new_action.set_duration_constraint(action.duration)
+        #new_action.add_condition(ClosedDurationInterval(StartTiming(), EndTiming()), self.act_pred)   
+
+        # TODO: can probably do this better with a substitution walker
+        for timing in action.conditions.keys():
+            for fact in action.conditions[timing]:
+                assert not fact.is_and()                
+                new_action.add_condition(timing, self.local_fluent_map[agent].get_correct_version(agent, fact))
+
+        for timing in action.effects.keys():
+            for effect in action.effects[timing]:
+                new_action.add_effect(timing, self.local_fluent_map[agent].get_correct_version(agent, effect.fluent), effect.value)
+
+        return new_action
+
+    def _compile(self, problem: "up.model.AbstractProblem", compilation_kind: "up.engines.CompilationKind") -> CompilerResult:
+        '''Creates a the robustness verification problem.'''
+
+        #Represents the map from the new action to the old action
+        new_to_old: Dict[Action, Action] = {}
+        
+        new_problem = self.initialize_problem(problem)
+
+        # Fluents
+        waiting_fluent_map = {}
+        for agent in problem.agents:
+            waiting_fluent_map[agent] = FluentMap("w-" + agent.name, default_value=False)
+            waiting_fluent_map[agent].add_facts(problem, new_problem)
+
+        inv_count_map = FluentMap("i", default_value=0, override_type=IntType(0))
+        inv_count_map.add_facts(problem, new_problem)
+
+
+
+        failure = Fluent("failure")
+        act = Fluent("act")
+        fin = Fluent("fin", _signature=[Parameter("a", self.agent_type)])
+        waiting = Fluent("waiting", _signature=[Parameter("a", self.agent_type)])
+
+        new_problem.add_fluent(failure, default_initial_value=False)
+        new_problem.add_fluent(act, default_initial_value=True)
+        new_problem.add_fluent(fin, default_initial_value=False)
+        new_problem.add_fluent(waiting, default_initial_value=False)
+
+        # Actions
+
+        for agent in problem.agents:
+            for action in agent.actions:                
+                c_start, c_overall, c_end = self.get_action_conditions(problem, agent, action, fail=True, wait=True)
+                w_start, w_overall, w_end = self.get_action_conditions(problem, agent, action, fail=False, wait=True)
+                f_start, f_overall, f_end = self.get_action_conditions(problem, agent, action, fail=True, wait=False)
+
+
+                a_s = self.create_action_copy(problem, agent, action, "s")
+                a_s.add_condition(StartTiming(), Not(waiting(self.get_agent_obj(agent))))
+                a_s.add_condition(ClosedDurationInterval(StartTiming(), EndTiming()), act())   
+                # Conditions/Effects on global copy
+                for timing in action.conditions.keys():
+                    for fact in action.conditions[timing]:
+                        assert not fact.is_and()                
+                        a_s.add_condition(timing, self.global_fluent_map.get_correct_version(agent, fact))
+                for timing in action.effects.keys():
+                    for effect in action.effects[timing]:
+                        a_s.add_effect(timing, self.global_fluent_map.get_correct_version(agent, effect.fluent), effect.value)
+                # accounting for invariant count
+                for c in c_overall:
+                    a_s.add_increase_effect(StartTiming(), inv_count_map.get_correct_version(agent, c), 1)
+                    a_s.add_decrease_effect(EndTiming(), inv_count_map.get_correct_version(agent, c), 1)
+                for effect in action.effects.get(StartTiming(), []):
+                    if effect.value.is_false():
+                        a_s.add_condition(StartTiming(), Equals(inv_count_map.get_correct_version(agent, effect.fluent), 0))
+                for effect in action.effects.get(EndTiming(), []):
+                    if effect.value.is_false():
+                        a_s.add_condition(EndTiming(), Equals(inv_count_map.get_correct_version(agent, effect.fluent), 1))
+                # accouting for other agents waiting
+                for effect in action.effects.get(StartTiming(), []):
+                    if effect.value.is_true():
+                        for ag in problem.agents:
+                            a_s.add_condition(StartTiming(), Not(waiting_fluent_map[ag].get_correct_version(agent, effect.fluent)))
+                for effect in action.effects.get(EndTiming(), []):
+                    if effect.value.is_true():
+                        for ag in problem.agents:
+                            a_s.add_condition(ClosedDurationInterval(StartTiming(), EndTiming()), Not(waiting_fluent_map[ag].get_correct_version(agent, effect.fluent)))
+
+                
+                new_problem.add_action(a_s)
+
+
+
+
+
+        # Initial state
+        eiv = problem.explicit_initial_values     
+        for fluent in eiv:
+            if fluent.is_dot():                
+                new_problem.set_initial_value(self.global_fluent_map.get_correct_version(fluent.agent(), fluent.args[0]), eiv[fluent])
+                for a in problem.agents:
+                    new_problem.set_initial_value(self.local_fluent_map[a].get_correct_version(fluent.agent(), fluent.args[0]), eiv[fluent])
+            else:
+                new_problem.set_initial_value(self.global_fluent_map.get_environment_version(fluent), eiv[fluent])
+                for a in problem.agents:
+                    new_problem.set_initial_value(self.local_fluent_map[a].get_environment_version(fluent), eiv[fluent])
+
+        # Goal
+        new_problem.add_goal(failure)
+        for agent in problem.agents:
+            new_problem.add_goal(fin(self.get_agent_obj(agent)))
+
+
+        w = PDDLWriter(new_problem)
+        w.write_domain("domain.pddl")
+        w.write_problem("problem.pddl")
+
+        return CompilerResult(
+            new_problem, partial(replace_action, map=new_to_old), self.name
+        )  
+
+
 env = up.environment.get_env()
 env.factory.add_engine('SimpleInstantaneousActionRobustnessVerifier', __name__, 'SimpleInstantaneousActionRobustnessVerifier')
 env.factory.add_engine('WaitingActionRobustnessVerifier', __name__, 'WaitingActionRobustnessVerifier')
+env.factory.add_engine('DurativeActionRobustnessVerifier', __name__, 'DurativeActionRobustnessVerifier')
