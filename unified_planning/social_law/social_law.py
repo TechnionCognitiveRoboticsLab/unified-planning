@@ -73,7 +73,7 @@ class SocialLawRobustnessChecker():
             sap = SingleAgentProjection(agent)        
             result = sap.compile(problem)
 
-            with OneshotPlanner(name=self._planner_name) as planner:
+            with OneshotPlanner(name=self._planner_name, problem_kind=result.problem.kind) as planner:
                 result = planner.solve(result.problem)
                 if result.status not in unified_planning.engines.results.POSITIVE_OUTCOMES:
                     self._status = SocialLawRobustnessStatus.NON_ROBUST_SINGLE_AGENT
