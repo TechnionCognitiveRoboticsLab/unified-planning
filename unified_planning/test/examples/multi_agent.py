@@ -141,7 +141,7 @@ def get_example_problems():
     ma_loader = Example(problem=problem, plan=plan)
     problems["ma-loader"] = ma_loader    
 
-def get_intersection_problem(cars = ["car-north", "car-south", "car-east", "car-west"], yields_list = []) -> MultiAgentProblemWithWaitfor:
+def get_intersection_problem(cars = ["car-north", "car-south", "car-east", "car-west"], yields_list = [], wait_drive=True) -> MultiAgentProblemWithWaitfor:
     # intersection multi agent
     problem = MultiAgentProblemWithWaitfor("intersection")
 
@@ -303,6 +303,15 @@ def get_intersection_problem(cars = ["car-north", "car-south", "car-east", "car-
             #     flobj = unified_planning.model.Object(flname, loc)
             #     tlobj = unified_planning.model.Object(tlname, loc)
             #     plan.actions.append(up.plans.ActionInstance(drive, (ObjectExp(flobj), ObjectExp(tlobj), ObjectExp(dobj) ), car))
+
+    # Add waitfor annotations
+    for agent in problem.agents:
+        drive = agent.action("drive")
+        if wait_drive:
+            problem.waitfor.annotate_as_waitfor(agent.name, drive.name, drive.preconditions[1])
+        if len(yields_list) > 0:
+            problem.waitfor.annotate_as_waitfor(agent.name, drive.name, drive.preconditions[5]) 
+
 
 
     intersection = Example(problem=problem, plan=plan)
