@@ -348,10 +348,12 @@ def get_intersection_problem(
     # Add waitfor annotations
     for agent in problem.agents:
         drive = agent.action("drive")
+        l2 = drive.parameter("l2")        
         if wait_drive:
-            problem.waitfor.annotate_as_waitfor(agent.name, drive.name, drive.preconditions[1])
+            problem.waitfor.annotate_as_waitfor(agent.name, drive.name, free(l2))
         if len(yields_list) > 0:
-            problem.waitfor.annotate_as_waitfor(agent.name, drive.name, drive.preconditions[5]) 
+            ly = drive.parameter("ly")
+            problem.waitfor.annotate_as_waitfor(agent.name, drive.name, free(ly)) 
 
 
 
