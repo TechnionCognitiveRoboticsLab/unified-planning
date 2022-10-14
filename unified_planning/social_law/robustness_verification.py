@@ -679,10 +679,34 @@ class DurativeActionRobustnessVerifier(RobustnessVerifier):
         # Actions
 
         for agent in problem.agents:
+            # Create end_s_i action
+            end_s_action = InstantaneousAction("end_s_" + agent.name)
+            end_s_action.add_precondition(Not(fin(self.get_agent_obj(agent))))
+            for g in self.get_agent_goal(problem, agent):
+                end_s_action.add_precondition(self.local_fluent_map[agent].get_correct_version(agent, g.args[0]))
+                end_s_action.add_precondition(self.global_fluent_map.get_correct_version(agent, g.args[0]))
+            end_s_action.add_effect(fin(self.get_agent_obj(agent)), True)
+            end_s_action.add_effect(act, False)
+            new_problem.add_action(end_s_action)
+
+            # Create end_f_i action
+            for j, gf in enumerate(self.get_agent_goal(problem, agent)):
+                end_f_action = InstantaneousAction("end_f_" + agent.name + "_" + str(j))
+                end_f_action.add_precondition(Not(self.global_fluent_map.get_correct_version(agent, gf.args[0])))
+                end_f_action.add_precondition(Not(fin(self.get_agent_obj(agent))))
+                for g in self.get_agent_goal(problem, agent):
+                    end_f_action.add_precondition(self.local_fluent_map[agent].get_correct_version(agent, g.args[0]))
+                end_f_action.add_effect(fin(self.get_agent_obj(agent)), True)
+                end_f_action.add_effect(failure, True)
+                end_f_action.add_effect(act, False)
+                new_problem.add_action(end_f_action)
+
+
             for action in agent.actions:                
                 c_start, c_overall, c_end = self.get_action_conditions(problem, agent, action, fail=True, wait=True)
                 w_start, w_overall, w_end = self.get_action_conditions(problem, agent, action, fail=False, wait=True)
                 f_start, f_overall, f_end = self.get_action_conditions(problem, agent, action, fail=True, wait=False)
+                assert(c_overall == f_overall and c_end == f_end and w_overall == [] and w_end == [])
 
 
                 a_s = self.create_action_copy(problem, agent, action, "s")
@@ -715,9 +739,134 @@ class DurativeActionRobustnessVerifier(RobustnessVerifier):
                     if effect.value.is_true():
                         for ag in problem.agents:
                             a_s.add_condition(ClosedDurationInterval(StartTiming(), EndTiming()), Not(waiting_fluent_map[ag].get_correct_version(agent, effect.fluent)))
-
-                
                 new_problem.add_action(a_s)
+
+                # Fail start version            
+                for i, fact in enumerate(f_start):
+                    a_fstart = self.create_action_copy(problem, agent, action, "f_start_" + str(i))
+                    for c in w_start:
+                        a_fstart.add_condition(StartTiming(), self.global_fluent_map.get_correct_version(agent, c))
+                    a_fstart.add_condition(StartTiming(), Not(self.global_fluent_map.get_correct_version(agent, fact)))
+                    a_fstart.add_condition(StartTiming(), Not(waiting(self.get_agent_obj(agent))))
+                    a_fstart.add_effect(StartTiming(), failure, True)
+                    new_problem.add_action(a_fstart)
+
+                # Fail inv version            
+                for i, fact in enumerate(f_overall):
+                    overall_condition_added_by_start_effect = False
+                    for effect in action.effects.get(StartTiming(), []):
+                        if effect.fluent == fact and effect.value.is_true():
+                            overall_condition_added_by_start_effect = True
+                            break
+                    if not overall_condition_added_by_start_effect:
+                        a_finv = self.create_action_copy(problem, agent, action, "f_inv_" + str(i))
+                        for c in c_start:
+                            a_fstart.add_condition(StartTiming(), self.global_fluent_map.get_correct_version(agent, c))
+                        a_finv.add_condition(StartTiming(), Not(self.global_fluent_map.get_correct_version(agent, fact)))
+                        for effect in action.effects.get(StartTiming(), []):
+                            a_finv.add_effect(StartTiming(), self.global_fluent_map.get_correct_version(agent, effect.fluent), effect.value)
+                            if effect.value.is_false():
+                                a_finv.add_condition(StartTiming(), Equals(inv_count_map.get_correct_version(agent, effect.fluent), 0))
+                            if effect.value.is_true():
+                                for ag in problem.agents:
+                                    a_finv.add_condition(StartTiming(),
+                                                        Not(waiting_fluent_map[ag].get_correct_version(agent, effect.fluent)))
+                        a_finv.add_condition(StartTiming(), Not(waiting(self.get_agent_obj(agent))))
+                        a_finv.add_effect(StartTiming(), failure, True)
+                        new_problem.add_action(a_finv)
+
+                # Fail end version            
+                for i, fact in enumerate(f_end):
+                    a_fend = self.create_action_copy(problem, agent, action, "f_end_" + str(i))
+                    for c in c_start:
+                        a_fend.add_condition(StartTiming(), self.global_fluent_map.get_correct_version(agent, c))
+                    for c in c_overall:
+                        a_fend.add_condition(OpenDurationInterval(StartTiming(), EndTiming()), self.global_fluent_map.get_correct_version(agent, c))
+                    a_fend.add_condition(StartTiming(), Not(waiting(self.get_agent_obj(agent))))
+                    a_fend.add_condition(EndTiming(), Not(self.global_fluent_map.get_correct_version(agent, fact)))
+                    for effect in action.effects.get(StartTiming(), []):
+                        a_fend.add_effect(StartTiming(), self.global_fluent_map.get_correct_version(agent, effect.fluent), effect.value)
+                        if effect.value.is_false():
+                            a_finv.add_condition(StartTiming(), Equals(inv_count_map.get_correct_version(agent, effect.fluent), 0))                                
+                        if effect.value.is_true():
+                            for agent in problem.agents:
+                                for ag in problem.agents:
+                                    a_fend.add_condition(StartTiming(),
+                                                    Not(waiting_fluent_map[ag].get_correct_version(agent, effect.fluent)))
+                    for effect in action.effects.get(EndTiming(), []):
+                        # if effect.value.is_false():
+                        #    a_fend.add_condition(StartTiming(), Equals(self.get_inv_count_version(effect.fluent), 0))
+                        if effect.value.is_true():
+                            for ag in problem.agents:
+                                # Changed timing from start to end
+                                a_fend.add_condition(EndTiming(), Not(waiting_fluent_map[ag].get_correct_version(agent, effect.fluent)))
+                    a_fend.add_condition(StartTiming(), Not(waiting(self.get_agent_obj(agent))))
+                    a_fend.add_effect(EndTiming(), failure, True)
+                    for c in c_overall:
+                        a_s.add_increase_effect(StartTiming(), inv_count_map.get_correct_version(agent, c), 1)
+                    new_problem.add_action(a_fend)
+
+                # Del inv start version            
+                for i, effect in enumerate(action.effects.get(StartTiming(), [])):
+                    if effect.value.is_false():
+                        a_finvstart = self.create_action_copy(problem, agent, action, "f_inv_start_" + str(i))
+                        a_finvstart.add_condition(StartTiming(), Not(waiting(self.get_agent_obj(agent))))
+                        for c in c_start:
+                            a_finvstart.add_condition(StartTiming(), self.global_fluent_map.get_correct_version(agent, c))
+                        a_finvstart.add_condition(StartTiming(), GT(inv_count_map.get_correct_version(agent, effect.fluent), 0))
+                        a_finvstart.add_effect(StartTiming(), failure, True)
+                        new_problem.add_action(a_finvstart)
+
+                # Del inv end version            
+                for i, effect in enumerate(action.effects.get(EndTiming(), [])):
+                    if effect.value.is_false():
+                        a_finvend = self.create_action_copy(problem, agent, action, "f_inv_end_" + str(i))
+                        a_finvend.add_condition(StartTiming(), Not(waiting(self.get_agent_obj(agent))))
+                        for c in c_start:
+                            a_finvend.add_condition(StartTiming(), self.global_fluent_map.get_correct_version(agent, c))
+                        for c in c_overall:
+                            a_finvend.add_condition(OpenDurationInterval(StartTiming(), EndTiming()),
+                                                    self.global_fluent_map.get_correct_version(agent, c))
+                        for c in c_end:
+                            a_finvend.add_condition(EndTiming(), self.global_fluent_map.get_correct_version(agent, c))
+                        a_finvend.add_condition(EndTiming(), GT(inv_count_map.get_correct_version(agent, effect.fluent), 0))
+                        
+                        for seffect in action.effects.get(StartTiming(), []):
+                            a_finvend.add_effect(StartTiming(), self.global_fluent_map.get_correct_version(agent, seffect.fluent), seffect.value)
+                            if seffect.value.is_false():
+                                a_finvstart.add_condition(StartTiming(), Equals(inv_count_map.get_correct_version(agent, seffect.fluent), 0))                                
+                            if seffect.value.is_true():
+                                for ag in problem.agents:
+                                    a_finvend.add_condition(StartTiming(),
+                                                            Not(waiting_fluent_map[ag].get_correct_version(agent, seffect.fluent)))
+                                    a_finvend.add_condition(OpenDurationInterval(StartTiming(), EndTiming()),
+                                                            Not(waiting_fluent_map[ag].get_correct_version(agent, seffect.fluent)))
+                        for seffect in action.effects.get(EndTiming(), []):
+                            a_finvend.add_effect(EndTiming(), self.global_fluent_map.get_correct_version(agent, seffect.fluent), seffect.value)
+
+                        # self.add_condition_inv_count_zero(effect.fluent, a_finvend, StartTiming(), True, 0)
+                        a_finvend.add_effect(StartTiming(), failure, True)
+                        for interval, condition in action.conditions.items():
+                            if interval.lower != interval.upper:
+                                for fact in condition:
+                                    a_finvend.add_increase_effect(StartTiming(), inv_count_map.get_correct_version(agent, fact), 1)                                    
+                        new_problem.add_action(a_finvend)
+                
+                # a^w_x version - wait forever for x to be true
+                for i, w_fact in enumerate(w_start):
+                    a_wx = self.create_action_copy(problem, agent, action, "w_" + str(i))
+                    a_wx.add_condition(StartTiming(), Not(waiting(self.get_agent_obj(agent))))
+
+                    a_wx.add_effect(StartTiming(), failure, True)
+                    a_wx.add_effect(StartTiming(), waiting(self.get_agent_obj(agent)), True)
+                    a_wx.add_condition(StartTiming(), Not(self.global_fluent_map.get_correct_version(agent, w_fact)))
+                    a_wx.add_effect(StartTiming(), waiting_fluent_map[agent].get_correct_version(agent, w_fact), True)
+                    new_problem.add_action(a_wx)
+
+                # a_waiting version - dummy version while agent is waiting
+                a_waiting = self.create_action_copy(problem, agent, action, "waiting")
+                a_waiting.add_condition(StartTiming(), waiting(self.get_agent_obj(agent)))
+                new_problem.add_action(a_waiting)
 
 
 
