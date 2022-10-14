@@ -68,7 +68,9 @@ class TestProblem(TestCase):
             with open("waitfor.json", "w") as f:
                 f.write(str(problem.waitfor))
 
-            slrc = SocialLawRobustnessChecker(save_pddl=True)
+            slrc = SocialLawRobustnessChecker(
+                robustness_verifier_name="SimpleInstantaneousActionRobustnessVerifier",
+                save_pddl=True)
             self.assertEqual(slrc.is_robust(problem), t.expected_outcome, t.name)
 
             

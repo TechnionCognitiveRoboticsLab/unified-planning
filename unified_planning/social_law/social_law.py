@@ -53,37 +53,12 @@ class SocialLawRobustnessChecker():
     '''social law robustness checker class:
     This class checks if a given MultiAgentProblemWithWaitfor is robust or not.
     '''
-    def __init__(self, planner_name : str = 'fast-downward', save_pddl = False):
+    def __init__(self, planner_name : str = 'fast-downward', robustness_verifier_name : str = None, save_pddl = False):
         self._planner_name = planner_name
+        self._robustness_verifier_name = robustness_verifier_name
         self._save_pddl = save_pddl
         self._status = None
         self._counter_example = None
-        
-
-    @property
-    def name(self) -> str:
-        return f"SocialLawRobustnessChecker[{self.engine.name}]"
-
-    @staticmethod
-    def is_compatible_engine(engine: Type[Engine]) -> bool:
-        return engine.is_oneshot_planner() and engine.supports(ProblemKind({"ACTION_BASED"}))  # type: ignore
-
-    @staticmethod
-    def _supported_kind(engine: Type[Engine]) -> "ProblemKind":
-        supported_kind = ProblemKind()
-        supported_kind.set_problem_class("ACTION_BASED_MULTI_AGENT")
-        supported_kind.set_typing("FLAT_TYPING")
-        supported_kind.set_typing("HIERARCHICAL_TYPING")
-        supported_kind.set_time("DISCRETE_TIME")
-        supported_kind.set_simulated_entities("SIMULATED_EFFECTS")
-        final_supported_kind = supported_kind.intersection(engine.supported_kind())        
-        return final_supported_kind
-
-    @staticmethod
-    def _supports(problem_kind: "ProblemKind", engine: Type[Engine]) -> bool:
-        return problem_kind <= SocialLawRobustnessChecker._supported_kind(engine)
-
-
 
     @property
     def counter_example(self) -> Plan:
@@ -108,7 +83,10 @@ class SocialLawRobustnessChecker():
     def is_multi_agent_robust(self, problem : MultiAgentProblemWithWaitfor) -> bool:
         self._counter_example = None
         
-        rbv = SimpleInstantaneousActionRobustnessVerifier()
+        rbv = Compiler(
+            name = self._robustness_verifier_name,
+            problem_kind = problem.kind, 
+            compilation_kind=CompilationKind.MA_SL_ROBUSTNESS_VERIFICATION)
         rbv_result = rbv.compile(problem)
 
         if self._save_pddl:

@@ -559,5 +559,5 @@ class WaitingActionRobustnessVerifier(InstantaneousActionRobustnessVerifier):
         )        
 
 env = up.environment.get_env()
-env.factory.add_engine('InstantaneousActionRobustnessVerifier', __name__, 'InstantaneousActionRobustnessVerifier')
+env.factory.add_engine('SimpleInstantaneousActionRobustnessVerifier', __name__, 'SimpleInstantaneousActionRobustnessVerifier')
 env.factory.add_engine('WaitingActionRobustnessVerifier', __name__, 'WaitingActionRobustnessVerifier')
