@@ -366,5 +366,13 @@ class MultiAgentProblem(
             for e in action.effects:
                 self._update_problem_kind_effect(e)
             #self._kind.set_time("CONTINUOUS_TIME")
+        elif isinstance(action, up.model.action.DurativeAction):
+            #TODO: finish implementing (like in the single agent problem class)
+            lower, upper = action.duration.lower, action.duration.upper
+            if lower != upper:
+                self._kind.set_time("DURATION_INEQUALITIES")          
+            if len(action.simulated_effects) > 0:
+                self._kind.set_simulated_entities("SIMULATED_EFFECTS")
+            self._kind.set_time("CONTINUOUS_TIME")
         else:
             raise NotImplementedError
