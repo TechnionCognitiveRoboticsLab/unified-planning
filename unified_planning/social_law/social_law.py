@@ -94,7 +94,7 @@ class SocialLawRobustnessChecker():
             w.write_domain("domain.pddl")
             w.write_problem("problem.pddl")            
         
-        with OneshotPlanner(name=self._planner_name) as planner:
+        with OneshotPlanner(name=self._planner_name, problem_kind=rbv_result.problem.kind) as planner:
             result = planner.solve(rbv_result.problem)
             if result.status in unified_planning.engines.results.POSITIVE_OUTCOMES:
                 self._counter_example = result.plan

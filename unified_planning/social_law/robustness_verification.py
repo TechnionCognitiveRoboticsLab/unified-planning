@@ -787,7 +787,7 @@ class DurativeActionRobustnessVerifier(RobustnessVerifier):
                     for effect in action.effects.get(StartTiming(), []):
                         a_fend.add_effect(StartTiming(), self.global_fluent_map.get_correct_version(agent, effect.fluent), effect.value)
                         if effect.value.is_false():
-                            a_finv.add_condition(StartTiming(), Equals(inv_count_map.get_correct_version(agent, effect.fluent), 0))                                
+                            a_fend.add_condition(StartTiming(), Equals(inv_count_map.get_correct_version(agent, effect.fluent), 0))                                
                         if effect.value.is_true():
                             for agent in problem.agents:
                                 for ag in problem.agents:
