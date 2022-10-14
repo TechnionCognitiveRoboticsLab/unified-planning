@@ -41,5 +41,13 @@ class WaitforSpecification:
             str_dict[x] = list(map(str, y))
         return str(str_dict)
 
+    def __eq__(self, oth: object) -> bool:
+        if not isinstance(oth, WaitforSpecification):
+            return False
+        return self.waitfor_map == oth.waitfor_map
+
+    def __hash__(self) -> int:
+        return hash(self.waitfor_map)
+
 
 

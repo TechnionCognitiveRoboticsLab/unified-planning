@@ -16,6 +16,7 @@
 
 from unified_planning.social_law.waitfor_specification import WaitforSpecification
 from unified_planning.model.multi_agent.ma_problem import MultiAgentProblem
+from unified_planning.model.multi_agent.agent import Agent
 from typing import Dict
 
 
@@ -35,7 +36,36 @@ class MultiAgentProblemWithWaitfor(MultiAgentProblem):
             waitfor = WaitforSpecification()
         self._waitfor = waitfor
 
-
     @property
     def waitfor(self) -> WaitforSpecification:
         return self._waitfor
+
+    def __repr__(self) -> str:
+        return MultiAgentProblem.__repr__(self) + "\n" + "waitfor: " + str(self.waitfor)
+
+    def __eq__(self, oth: object) -> bool:
+        if not (isinstance(oth, MultiAgentProblem)) or self._env != oth._env:
+            return False
+        return MultiAgentProblem.__eq__(self, oth) and self.waitfor == oth.waitfor
+
+    def __hash__(self) -> int:
+        return MultiAgentProblem.__hash__(self) + hash(self.waitfor)     
+
+    def clone(self):
+        new_p = MultiAgentProblemWithWaitfor(self._name, self._env)
+        for f in self.ma_environment.fluents:
+            new_p.ma_environment.add_fluent(f)
+        for ag in self.agents:
+            new_ag = Agent(ag.name, self)
+            for f in ag.fluents:
+                new_ag.add_fluent(f)
+            for a in ag.actions:
+                new_ag.add_action(a.clone())
+        new_p._user_types = self._user_types[:]
+        new_p._user_types_hierarchy = self._user_types_hierarchy.copy()
+        new_p._objects = self._objects[:]
+        new_p._initial_value = self._initial_value.copy()
+        new_p._goals = self._goals[:]
+        new_p._initial_defaults = self._initial_defaults.copy()
+        new_p._waitfor = self.waitfor.copy()
+        return new_p   
