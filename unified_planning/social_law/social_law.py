@@ -53,7 +53,7 @@ class SocialLawRobustnessChecker():
     '''social law robustness checker class:
     This class checks if a given MultiAgentProblemWithWaitfor is robust or not.
     '''
-    def __init__(self, planner_name : str = 'fast-downward', robustness_verifier_name : str = None, save_pddl = False):
+    def __init__(self, planner_name : str = None, robustness_verifier_name : str = None, save_pddl = False):
         self._planner_name = planner_name
         self._robustness_verifier_name = robustness_verifier_name
         self._save_pddl = save_pddl
