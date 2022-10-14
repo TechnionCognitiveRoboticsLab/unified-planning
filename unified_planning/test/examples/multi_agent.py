@@ -141,7 +141,11 @@ def get_example_problems():
     ma_loader = Example(problem=problem, plan=plan)
     problems["ma-loader"] = ma_loader    
 
-def get_intersection_problem(cars = ["car-north", "car-south", "car-east", "car-west"], yields_list = [], wait_drive=True) -> MultiAgentProblemWithWaitfor:
+def get_intersection_problem(
+    cars = ["car-north", "car-south", "car-east", "car-west"], 
+    yields_list = [], 
+    wait_drive = True,
+    durative = False) -> MultiAgentProblemWithWaitfor:
     # intersection multi agent
     problem = MultiAgentProblemWithWaitfor("intersection")
 
@@ -203,15 +207,28 @@ def get_intersection_problem(cars = ["car-north", "car-south", "car-east", "car-
         #     	(arrived ?a)
         #       )
         #   )
-    arrive = InstantaneousAction('arrive', l=loc)    
-    l = arrive.parameter('l')
-    arrive.add_precondition(start(l))
-    arrive.add_precondition(not_arrived())
-    arrive.add_precondition(free(l))
-    arrive.add_effect(at(l), True)
-    arrive.add_effect(free(l), False)
-    arrive.add_effect(arrived(), True)   
-    arrive.add_effect(not_arrived(), False)   
+    if durative:
+        arrive = DurativeAction('arrive', l=loc)
+        arrive.set_fixed_duration(1)        
+        l = arrive.parameter('l')
+        
+        arrive.add_condition(StartTiming(),start(l))
+        arrive.add_condition(StartTiming(),not_arrived())
+        arrive.add_condition(OpenDurationInterval(StartTiming(), EndTiming()),free(l))
+        arrive.add_effect(EndTiming(), at(l), True)
+        arrive.add_effect(EndTiming(), free(l), False)
+        arrive.add_effect(EndTiming(), arrived(), True)        
+        arrive.add_effect(EndTiming(), not_arrived(), False)        
+    else:
+        arrive = InstantaneousAction('arrive', l=loc)    
+        l = arrive.parameter('l')
+        arrive.add_precondition(start(l))
+        arrive.add_precondition(not_arrived())
+        arrive.add_precondition(free(l))
+        arrive.add_effect(at(l), True)
+        arrive.add_effect(free(l), False)
+        arrive.add_effect(arrived(), True)   
+        arrive.add_effect(not_arrived(), False)   
 
 
 
@@ -234,26 +251,50 @@ def get_intersection_problem(cars = ["car-north", "car-south", "car-east", "car-
     #       )
     #    )    
     # )
-    if len(yields_list) > 0:
-        drive = InstantaneousAction('drive', l1=loc, l2=loc, d=direction, ly=loc)    
+    if durative:
+        if len(yields_list) > 0:
+            drive = DurativeAction('drive', l1=loc, l2=loc, d=direction, ly=loc)
+        else:
+            drive = DurativeAction('drive', l1=loc, l2=loc, d=direction)
+        drive.set_fixed_duration(1)        
+        l1 = drive.parameter('l1')
+        l2 = drive.parameter('l2')
+        d = drive.parameter('d')        
+        drive.add_condition(StartTiming(), at(l1))
+        if wait_drive:        
+            drive.add_condition(ClosedDurationInterval(StartTiming(), EndTiming()), free(l2))
+        drive.add_condition(StartTiming(), traveldirection(d))
+        drive.add_condition(EndTiming(), connected(l1,l2,d))        
+        drive.add_effect(EndTiming(), at(l2),True)
+        drive.add_effect(EndTiming(), free(l2), False)
+        drive.add_effect(StartTiming(), at(l1), False)
+        drive.add_effect(EndTiming(), free(l1), True)
+        if len(yields_list) > 0:
+            ly = drive.parameter('ly')
+            drive.add_condition(StartTiming(), yieldsto(l1,ly))
+            drive.add_condition(ClosedDurationInterval(StartTiming(), EndTiming()), free(ly))
+
     else:
-        drive = InstantaneousAction('drive', l1=loc, l2=loc, d=direction)
-    l1 = drive.parameter('l1')
-    l2 = drive.parameter('l2')
-    d = drive.parameter('d')
-    #ly = drive.parameter('ly')
-    drive.add_precondition(at(l1))
-    drive.add_precondition(free(l2))  # Remove for yield/wait
-    drive.add_precondition(traveldirection(d))
-    drive.add_precondition(connected(l1,l2,d))
-    if len(yields_list) > 0:
-        ly = drive.parameter('ly')
-        drive.add_precondition(yieldsto(l1,ly))
-        drive.add_precondition(free(ly))
-    drive.add_effect(at(l2),True)
-    drive.add_effect(free(l2), False)
-    drive.add_effect(at(l1), False)
-    drive.add_effect(free(l1), True)    
+        if len(yields_list) > 0:
+            drive = InstantaneousAction('drive', l1=loc, l2=loc, d=direction, ly=loc)    
+        else:
+            drive = InstantaneousAction('drive', l1=loc, l2=loc, d=direction)
+        l1 = drive.parameter('l1')
+        l2 = drive.parameter('l2')
+        d = drive.parameter('d')
+        #ly = drive.parameter('ly')
+        drive.add_precondition(at(l1))
+        drive.add_precondition(free(l2))  # Remove for yield/wait
+        drive.add_precondition(traveldirection(d))
+        drive.add_precondition(connected(l1,l2,d))
+        if len(yields_list) > 0:
+            ly = drive.parameter('ly')
+            drive.add_precondition(yieldsto(l1,ly))
+            drive.add_precondition(free(ly))
+        drive.add_effect(at(l2),True)
+        drive.add_effect(free(l2), False)
+        drive.add_effect(at(l1), False)
+        drive.add_effect(free(l1), True)    
 
 
 

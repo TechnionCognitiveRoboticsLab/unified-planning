@@ -42,12 +42,16 @@ UNSOLVABLE_OUTCOMES = frozenset(
 )
 
 class RobustnessTestCase:
-    def __init__(self, name, expected_outcome : SocialLawRobustnessStatus, cars = ["car-north", "car-south", "car-east", "car-west"], yields_list = [], wait_drive = True):
+    def __init__(self, name, 
+                    expected_outcome : SocialLawRobustnessStatus, 
+                    cars = ["car-north", "car-south", "car-east", "car-west"], 
+                    yields_list = [], 
+                    wait_drive = True):
         self.name = name
         self.cars = cars
         self.yields_list = yields_list
         self.expected_outcome = expected_outcome
-        self.wait_drive = wait_drive
+        self.wait_drive = wait_drive        
 
 
 class TestProblem(TestCase):
@@ -64,12 +68,23 @@ class TestProblem(TestCase):
 
     def test_all_cases(self):
         for t in self.test_cases:
-            problem = get_intersection_problem(t.cars, t.yields_list, t.wait_drive).problem
+            problem = get_intersection_problem(t.cars, t.yields_list, t.wait_drive, durative=False).problem
             with open("waitfor.json", "w") as f:
                 f.write(str(problem.waitfor))
 
             slrc = SocialLawRobustnessChecker(
                 robustness_verifier_name="SimpleInstantaneousActionRobustnessVerifier",
+                save_pddl=True)
+            self.assertEqual(slrc.is_robust(problem), t.expected_outcome, t.name)
+        
+    def test_all_cases_durative(self):
+        for t in self.test_cases:
+            problem = get_intersection_problem(t.cars, t.yields_list, t.wait_drive, durative=True).problem
+            with open("waitfor.json", "w") as f:
+                f.write(str(problem.waitfor))
+
+            slrc = SocialLawRobustnessChecker(
+                planner_name=None,
                 save_pddl=True)
             self.assertEqual(slrc.is_robust(problem), t.expected_outcome, t.name)
 
