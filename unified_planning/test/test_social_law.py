@@ -73,9 +73,14 @@ class TestProblem(TestCase):
                 f.write(str(problem.waitfor))
 
             slrc = SocialLawRobustnessChecker(
+                planner_name="fast-downward",
                 robustness_verifier_name="SimpleInstantaneousActionRobustnessVerifier",
-                save_pddl=True)
+                save_pddl=True,
+                
+                )
             self.assertEqual(slrc.is_robust(problem), t.expected_outcome, t.name)
+            if t.expected_outcome:
+                presult = slrc.solve(problem)
         
     def test_all_cases_durative(self):
         for t in self.test_cases:
@@ -83,9 +88,9 @@ class TestProblem(TestCase):
             with open("waitfor.json", "w") as f:
                 f.write(str(problem.waitfor))
 
-            slrc = SocialLawRobustnessChecker(
-                planner_name=None,
-                save_pddl=True)
+            slrc = SocialLawRobustnessChecker(                                
+                save_pddl=True,                
+                )
             self.assertEqual(slrc.is_robust(problem), t.expected_outcome, t.name)
 
             
