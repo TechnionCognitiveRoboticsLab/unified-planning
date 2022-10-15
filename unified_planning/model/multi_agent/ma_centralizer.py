@@ -25,10 +25,8 @@ from typing import List, Dict, Union, Optional
 from unified_planning.engines.compilers.utils import replace_action, get_fresh_name
 from functools import partial
 import unified_planning as up
-from unified_planning.social_law.robustness_verification import FluentMap
+from unified_planning.social_law.robustness_verification import FluentMap, FluentMapSubstituter
 from unified_planning.engines import Credits
-import unified_planning.model.walkers as walkers
-from unified_planning.model.walkers.identitydag import IdentityDagWalker
 from unified_planning.model.fnode import FNode
 from unified_planning.model.operators import OperatorKind
 from unified_planning.model.expression import Expression
@@ -42,29 +40,6 @@ credits = Credits('Multi Agent Problem Centralizer',
                   'Apache License, Version 2.0',
                   'Compilation from a multi agent planning problem to a centralized single agent problem.',
                   'Compilation from a multi agent planning problem to a centralized single agent problem.')
-
-
-class FluentMapSubstituter(IdentityDagWalker):
-    """Performs substitution according to the given FluentMap"""
-
-    def __init__(self, env: "unified_planning.environment.Environment"):
-        IdentityDagWalker.__init__(self, env, True)
-        self.env = env
-        self.manager = env.expression_manager
-        self.type_checker = env.type_checker
-
-    def _get_key(self, expression, **kwargs):
-        return expression
-
-    def substitute(self, expression: FNode, fmap: FluentMap, agent: Agent) -> FNode:
-        """
-        Performs substitution into the given expression, according to the given FluentMap
-        """
-        return self.walk(expression, fmap=fmap, agent = agent)
-
-    def walk_fluent_exp(self, expression: FNode, args: List[FNode], **kwargs) -> FNode:
-        return kwargs["fmap"].get_correct_version(kwargs["agent"], expression)
-
 
 
 class MultiAgentProblemCentralizer(engines.engine.Engine, CompilerMixin):

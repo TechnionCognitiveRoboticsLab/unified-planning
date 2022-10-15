@@ -39,6 +39,8 @@ from unified_planning.social_law.ma_problem_waitfor import MultiAgentProblemWith
 import unified_planning as up
 from unified_planning.engines import Credits
 from unified_planning.io.pddl_writer import PDDLWriter
+import unified_planning.model.walkers as walkers
+from unified_planning.model.walkers.identitydag import IdentityDagWalker
 
 
 credits = Credits('Robustness Verification',
@@ -140,6 +142,27 @@ class FluentMap():
                 new_problem.add_fluent(g_fluent, default_initial_value=default_val)                
 
     
+class FluentMapSubstituter(IdentityDagWalker):
+    """Performs substitution according to the given FluentMap"""
+
+    def __init__(self, env: "unified_planning.environment.Environment"):
+        IdentityDagWalker.__init__(self, env, True)
+        self.env = env
+        self.manager = env.expression_manager
+        self.type_checker = env.type_checker
+
+    def _get_key(self, expression, **kwargs):
+        return expression
+
+    def substitute(self, expression: FNode, fmap: FluentMap, agent: Agent) -> FNode:
+        """
+        Performs substitution into the given expression, according to the given FluentMap
+        """
+        return self.walk(expression, fmap=fmap, agent = agent)
+
+    def walk_fluent_exp(self, expression: FNode, args: List[FNode], **kwargs) -> FNode:
+        return kwargs["fmap"].get_correct_version(kwargs["agent"], expression)
+
 
 class RobustnessVerifier(engines.engine.Engine, CompilerMixin):
     '''Robustness verifier (abstract) class:
@@ -224,6 +247,8 @@ class RobustnessVerifier(engines.engine.Engine, CompilerMixin):
             self.local_fluent_map[agent] = FluentMap("l-" + agent.name)
             self.local_fluent_map[agent].add_facts(problem, new_problem)
 
+        self.fsub = FluentMapSubstituter(new_problem.env)
+
         return new_problem
 
             
@@ -256,10 +281,10 @@ class InstantaneousActionRobustnessVerifier(RobustnessVerifier):
             d[p.name] = p.type
 
         new_action = InstantaneousAction(prefix + "_" + agent.name + "_" + action.name, _parameters=d)        
-        for fact in self.get_action_preconditions(problem, agent, action, True, True):
-            new_action.add_precondition(self.local_fluent_map[agent].get_correct_version(agent, fact))
+        for fact in self.get_action_preconditions(problem, agent, action, True, True):            
+            new_action.add_precondition(self.fsub.substitute(fact, self.local_fluent_map[agent], agent))                
         for effect in action.effects:
-            new_action.add_effect(self.local_fluent_map[agent].get_correct_version(agent, effect.fluent), effect.value)
+            new_action.add_effect(self.fsub.substitute(effect.fluent, self.local_fluent_map[agent], agent), effect.value)
 
         return new_action
 
@@ -640,11 +665,10 @@ class DurativeActionRobustnessVerifier(RobustnessVerifier):
         for timing in action.conditions.keys():
             for fact in action.conditions[timing]:
                 assert not fact.is_and()                
-                new_action.add_condition(timing, self.local_fluent_map[agent].get_correct_version(agent, fact))
-
+                new_action.add_condition(timing, self.fsub.substitute(fact, self.local_fluent_map[agent], agent))
         for timing in action.effects.keys():
             for effect in action.effects[timing]:
-                new_action.add_effect(timing, self.local_fluent_map[agent].get_correct_version(agent, effect.fluent), effect.value)
+                new_action.add_effect(timing, self.fsub.substitute(effect.fluent, self.local_fluent_map[agent], agent), effect.value)
 
         return new_action
 
