@@ -51,9 +51,13 @@ class SocialLawRobustnessStatus(Enum):
     NON_ROBUST_MULTI_AGENT_FAIL = auto() # Social law is not robust because the compilation achieves fail
     NON_ROBUST_MULTI_AGENT_DEADLOCK = auto() # Social law is not robust because the compilation achieves a deadlock
 
-class SocialLawRobustnessResults(Result):
+class SocialLawRobustnessResult(Result):
     status : SocialLawRobustnessStatus
-    counter_example : Plan
+    counter_example : Optional["up.plans.Plan"]
+
+    def __init__(self, status : SocialLawRobustnessStatus, counter_example : Optional["up.plans.Plan"]):
+        self.status = status
+        self.counter_example = counter_example
     
 
 
@@ -67,8 +71,7 @@ class SocialLawRobustnessChecker(engines.engine.Engine, mixins.OneshotPlannerMix
         self._planner_name = planner_name
         self._robustness_verifier_name = robustness_verifier_name
         self._save_pddl = save_pddl
-        self._status = None
-        self._counter_example = None
+        
 
     @property
     def name(self) -> str:
@@ -134,12 +137,11 @@ class SocialLawRobustnessChecker(engines.engine.Engine, mixins.OneshotPlannerMix
 
             with OneshotPlanner(name=self._planner_name, problem_kind=result.problem.kind) as planner:
                 presult = planner.solve(result.problem)
-                if presult.status not in unified_planning.engines.results.POSITIVE_OUTCOMES:
-                    self._status = SocialLawRobustnessStatus.NON_ROBUST_SINGLE_AGENT
+                if presult.status not in unified_planning.engines.results.POSITIVE_OUTCOMES:                    
                     return False
         return True
 
-    def is_multi_agent_robust(self, problem : MultiAgentProblemWithWaitfor) -> bool:
+    def multi_agent_robustness_counterexample(self, problem : MultiAgentProblemWithWaitfor) -> Plan:
         self._counter_example = None
         
         rbv = Compiler(
@@ -156,27 +158,29 @@ class SocialLawRobustnessChecker(engines.engine.Engine, mixins.OneshotPlannerMix
         with OneshotPlanner(name=self._planner_name, problem_kind=rbv_result.problem.kind) as planner:
             result = planner.solve(rbv_result.problem)
             if result.status in unified_planning.engines.results.POSITIVE_OUTCOMES:
-                self._counter_example = result.plan
-                return False
-        return True         
+                return result.plan
+        return None         
 
 
-    def is_robust(self, problem : MultiAgentProblemWithWaitfor) -> SocialLawRobustnessStatus:
-        self._status =  SocialLawRobustnessStatus.ROBUST_RATIONAL
+    def is_robust(self, problem : MultiAgentProblemWithWaitfor) -> SocialLawRobustnessResult:
+        status =  SocialLawRobustnessStatus.ROBUST_RATIONAL
+        # Check single agent solvability
         if not self.is_single_agent_solvable(problem):
-            self._status = SocialLawRobustnessStatus.NON_ROBUST_SINGLE_AGENT
-            return self._status            
-        if not self.is_multi_agent_robust(problem):
-            for action_occurence in self.counter_example.actions:
+            return SocialLawRobustnessResult(SocialLawRobustnessStatus.NON_ROBUST_SINGLE_AGENT, None)
+        
+        # Check for rational robustness
+        counter_example = self.multi_agent_robustness_counterexample(problem)        
+        if counter_example is not None:
+            for action_occurence in counter_example.actions:
                 parts = action_occurence.action.name.split("_")
                 if parts[0] == "f":
-                    self._status = SocialLawRobustnessStatus.NON_ROBUST_MULTI_AGENT_FAIL
+                    status = SocialLawRobustnessStatus.NON_ROBUST_MULTI_AGENT_FAIL
                     break
                 elif parts[0] == "w":
-                    self._status = SocialLawRobustnessStatus.NON_ROBUST_MULTI_AGENT_DEADLOCK            
+                    status = SocialLawRobustnessStatus.NON_ROBUST_MULTI_AGENT_DEADLOCK            
                     break
-            assert(self._status in [SocialLawRobustnessStatus.NON_ROBUST_MULTI_AGENT_FAIL, SocialLawRobustnessStatus.NON_ROBUST_MULTI_AGENT_DEADLOCK])        
-        return self._status
+            assert(status in [SocialLawRobustnessStatus.NON_ROBUST_MULTI_AGENT_FAIL, SocialLawRobustnessStatus.NON_ROBUST_MULTI_AGENT_DEADLOCK])        
+        return SocialLawRobustnessResult(status, counter_example)
 
     def _solve(self, problem: 'up.model.AbstractProblem',
             callback: Optional[Callable[['up.engines.results.PlanGenerationResult'], None]] = None,
@@ -197,6 +201,8 @@ class SocialLawRobustnessChecker(engines.engine.Engine, mixins.OneshotPlannerMix
                 plans[agent] = presult.plan
 
         return unified_planning.engines.results.PlanGenerationResult(
-            unified_planning.engines.results.PlanGenerationResultStatus.SOLVED_SATISFICING            
+            unified_planning.engines.results.PlanGenerationResultStatus.SOLVED_SATISFICING,
+            plan=None,
+            engine_name = self.name      
         )
         

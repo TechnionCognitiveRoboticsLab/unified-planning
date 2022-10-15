@@ -78,7 +78,7 @@ class TestProblem(TestCase):
                 save_pddl=True,
                 
                 )
-            self.assertEqual(slrc.is_robust(problem), t.expected_outcome, t.name)
+            self.assertEqual(slrc.is_robust(problem).status, t.expected_outcome, t.name)
             if t.expected_outcome:
                 presult = slrc.solve(problem)
         
@@ -91,6 +91,6 @@ class TestProblem(TestCase):
             slrc = SocialLawRobustnessChecker(                                
                 save_pddl=True,                
                 )
-            self.assertEqual(slrc.is_robust(problem), t.expected_outcome, t.name)
+            self.assertEqual(slrc.is_robust(problem).status, t.expected_outcome, t.name)
 
             
