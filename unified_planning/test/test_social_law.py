@@ -70,18 +70,14 @@ class TestProblem(TestCase):
     def test_all_cases(self):
         for t in self.test_cases:
             problem = get_intersection_problem(t.cars, t.yields_list, t.wait_drive, durative=False).problem
-            with open("waitfor.json", "w") as f:
-                f.write(str(problem.waitfor))
-
             slrc = SocialLawRobustnessChecker(
                 planner_name="fast-downward",
-                robustness_verifier_name="SimpleInstantaneousActionRobustnessVerifier",
-                save_pddl=True,
-                
+                robustness_verifier_name="SimpleInstantaneousActionRobustnessVerifier"
                 )
             self.assertEqual(slrc.is_robust(problem).status, t.expected_outcome, t.name)
-            if t.expected_outcome:
+            if t.expected_outcome == SocialLawRobustnessStatus.ROBUST_RATIONAL:
                 presult = slrc.solve(problem)
+                self.assertIn(presult.status, POSITIVE_OUTCOMES, t.name)
 
     def test_centralizer(self):
         for t in self.test_cases:
@@ -91,7 +87,7 @@ class TestProblem(TestCase):
                 cresult = mac.compile(problem)
                 with OneshotPlanner(problem_kind=cresult.problem.kind) as planner:
                     presult = planner.solve(cresult.problem)
-                    assert presult.status in POSITIVE_OUTCOMES
+                    self.assertIn(presult.status, POSITIVE_OUTCOMES, t.name)
 
         
     def test_all_cases_durative(self):

@@ -19,7 +19,7 @@ from unified_planning.social_law.single_agent_projection import SingleAgentProje
 from unified_planning.social_law.robustness_verification import SimpleInstantaneousActionRobustnessVerifier
 from unified_planning.social_law.waitfor_specification import WaitforSpecification
 from unified_planning.social_law.ma_problem_waitfor import MultiAgentProblemWithWaitfor
-from unified_planning.model import Parameter, Fluent, InstantaneousAction
+from unified_planning.model import Parameter, Fluent, InstantaneousAction, problem_kind
 from unified_planning.shortcuts import *
 from unified_planning.exceptions import UPProblemDefinitionError
 from unified_planning.model import Problem, InstantaneousAction, DurativeAction, Action
@@ -30,12 +30,14 @@ from unified_planning.engines import Credits
 from unified_planning.model.multi_agent import *
 from unified_planning.engines.mixins.compiler import CompilationKind, CompilerMixin
 import unified_planning.engines as engines
-from unified_planning.plans.plan import Plan
+from unified_planning.plans import Plan, SequentialPlan
 import unified_planning.engines.results 
 from unified_planning.engines.meta_engine import MetaEngine
 import unified_planning.engines.mixins as mixins
 from unified_planning.engines.mixins.oneshot_planner import OptimalityGuarantee
 from unified_planning.engines.results import *
+from unified_planning.engines.sequential_simulator import SequentialSimulator
+from unified_planning.model.multi_agent.ma_centralizer import MultiAgentProblemCentralizer
 
 credits = Credits('Social Law',
                   'Technion Cognitive Robotics Lab (cf. https://github.com/TechnionCognitiveRoboticsLab)',
@@ -188,6 +190,7 @@ class SocialLawRobustnessChecker(engines.engine.Engine, mixins.OneshotPlannerMix
             output_stream: Optional[IO[str]] = None) -> 'up.engines.results.PlanGenerationResult':
         assert isinstance(problem, MultiAgentProblemWithWaitfor)
         plans = {}
+        current_step = {}
         for agent in problem.agents:
             sap = SingleAgentProjection(agent)        
             result = sap.compile(problem)
@@ -197,12 +200,61 @@ class SocialLawRobustnessChecker(engines.engine.Engine, mixins.OneshotPlannerMix
                 if presult.status not in unified_planning.engines.results.POSITIVE_OUTCOMES:
                     return unified_planning.engines.results.PlanGenerationResult(
                         unified_planning.engines.results.UNSOLVABLE_INCOMPLETELY,
+                        plan=None,
                         engine_name = self.name)
                 plans[agent] = presult.plan
+                current_step[agent] = 0
 
-        return unified_planning.engines.results.PlanGenerationResult(
-            unified_planning.engines.results.PlanGenerationResultStatus.SOLVED_SATISFICING,
-            plan=None,
-            engine_name = self.name      
-        )
+        mac = MultiAgentProblemCentralizer()
+        cresult = mac.compile(problem)        
+        simulator = SequentialSimulator(cresult.problem)
+        current_state: "COWState" = UPCOWState(cresult.problem.initial_values)
+
+        plan = SequentialPlan([])
+
+        active_agents = problem.agents.copy()
+        active_agents_next = []
+                
+        while len(active_agents) > 0:
+            action_performed = False
+            for agent in active_agents:
+                if current_step[agent] < len(plans[agent].actions):
+                    active_agents_next.append(agent)
+                    ai = plans[agent].actions[current_step[agent]]
+                    action = cresult.problem.action(agent.name + "__" + ai.action.name)
+                    assert isinstance(action, unified_planning.model.InstantaneousAction)
+
+                    applicable = True
+                    events = simulator.get_events(action, ai.actual_parameters)
+                    for event in events:
+                        if not simulator.is_applicable(event, current_state):
+                            applicable = False
+                            break
+                    
+                    if applicable:
+                        plan.actions.append(ActionInstance(ai.action, ai.actual_parameters, agent))
+                        action_performed = True
+                        for event in events:                
+                            current_state = simulator.apply_unsafe(event, current_state)
+                        current_step[agent] = current_step[agent] + 1
+            if not action_performed and len(active_agents_next) > 0:
+                # deadlock occurred
+                return PlanGenerationResult(unified_planning.engines.results.PlanGenerationResultStatus.UNSOLVABLE_INCOMPLETELY,
+                                            plan=None,
+                                            engine_name = self.name)
+            active_agents = active_agents_next.copy()
+            active_agents_next = []
+
+        unsatisfied_goals = simulator.get_unsatisfied_goals(current_state)
+        if len(unsatisfied_goals) == 0:            
+            return unified_planning.engines.results.PlanGenerationResult(
+                unified_planning.engines.results.PlanGenerationResultStatus.SOLVED_SATISFICING,
+                plan=plan,
+                engine_name = self.name      
+            )
+        else:
+            # Goal not achieved at the end
+            return PlanGenerationResult(unified_planning.engines.results.PlanGenerationResultStatus.UNSOLVABLE_INCOMPLETELY,
+                                            plan=None,
+                                            engine_name = self.name)
         
