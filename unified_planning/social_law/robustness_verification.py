@@ -200,6 +200,7 @@ class RobustnessVerifier(engines.engine.Engine, CompilerMixin):
 
 
     def initialize_problem(self, problem):
+        assert isinstance(problem, MultiAgentProblemWithWaitfor)
         new_problem = Problem(f'{self.name}_{problem.name}')
 
         # Add types
