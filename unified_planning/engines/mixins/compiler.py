@@ -29,7 +29,9 @@ class CompilationKind(Enum):
     NEGATIVE_CONDITIONS_REMOVING = auto()
     QUANTIFIERS_REMOVING = auto()
     MA_SINGLE_AGENT_PROJECTION = auto()
-    MA_SL_ROBUSTNESS_VERIFICATION= auto()
+    MA_CENTRALIZATION = auto()
+    MA_SL_ROBUSTNESS_VERIFICATION = auto()
+    MA_SL_SOCIAL_LAW = auto()
 
 
 class CompilerMixin:

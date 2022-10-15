@@ -21,6 +21,7 @@ from unified_planning.social_law.single_agent_projection import SingleAgentProje
 from unified_planning.social_law.robustness_verification import RobustnessVerifier, SimpleInstantaneousActionRobustnessVerifier, WaitingActionRobustnessVerifier
 from unified_planning.social_law.waitfor_specification import WaitforSpecification
 from unified_planning.social_law.ma_problem_waitfor import MultiAgentProblemWithWaitfor
+from unified_planning.model.multi_agent.ma_centralizer import MultiAgentProblemCentralizer
 from unified_planning.social_law.social_law import SocialLawRobustnessChecker, SocialLawRobustnessStatus
 from unified_planning.model.multi_agent import *
 from unified_planning.io import PDDLWriter
@@ -81,6 +82,17 @@ class TestProblem(TestCase):
             self.assertEqual(slrc.is_robust(problem).status, t.expected_outcome, t.name)
             if t.expected_outcome:
                 presult = slrc.solve(problem)
+
+    def test_centralizer(self):
+        for t in self.test_cases:
+            for durative in [False]:# True]:
+                problem = get_intersection_problem(t.cars, t.yields_list, t.wait_drive, durative=durative).problem
+                mac = MultiAgentProblemCentralizer()
+                cresult = mac.compile(problem)
+                with OneshotPlanner(problem_kind=cresult.problem.kind) as planner:
+                    presult = planner.solve(cresult.problem)
+                    assert presult.status in POSITIVE_OUTCOMES
+
         
     def test_all_cases_durative(self):
         for t in self.test_cases:
