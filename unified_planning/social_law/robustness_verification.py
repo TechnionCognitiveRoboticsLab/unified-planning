@@ -249,6 +249,18 @@ class RobustnessVerifier(engines.engine.Engine, CompilerMixin):
 
         self.fsub = FluentMapSubstituter(new_problem.env)
 
+        # Initial state
+        eiv = problem.explicit_initial_values     
+        for fluent in eiv:
+            if fluent.is_dot():                
+                new_problem.set_initial_value(self.global_fluent_map.get_correct_version(fluent.agent(), fluent.args[0]), eiv[fluent])
+                for a in problem.agents:
+                    new_problem.set_initial_value(self.local_fluent_map[a].get_correct_version(fluent.agent(), fluent.args[0]), eiv[fluent])
+            else:
+                new_problem.set_initial_value(self.global_fluent_map.get_environment_version(fluent), eiv[fluent])
+                for a in problem.agents:
+                    new_problem.set_initial_value(self.local_fluent_map[a].get_environment_version(fluent), eiv[fluent])
+
         return new_problem
 
             
@@ -403,17 +415,7 @@ class SimpleInstantaneousActionRobustnessVerifier(InstantaneousActionRobustnessV
                 a_pw.add_precondition(waiting(self.get_agent_obj(agent)))
                 new_problem.add_action(a_pw)
 
-        # Initial state
-        eiv = problem.explicit_initial_values     
-        for fluent in eiv:
-            if fluent.is_dot():                
-                new_problem.set_initial_value(self.global_fluent_map.get_correct_version(fluent.agent(), fluent.args[0]), eiv[fluent])
-                for a in problem.agents:
-                    new_problem.set_initial_value(self.local_fluent_map[a].get_correct_version(fluent.agent(), fluent.args[0]), eiv[fluent])
-            else:
-                new_problem.set_initial_value(self.global_fluent_map.get_environment_version(fluent), eiv[fluent])
-                for a in problem.agents:
-                    new_problem.set_initial_value(self.local_fluent_map[a].get_environment_version(fluent), eiv[fluent])
+
 
         # Goal
         new_problem.add_goal(failure)
@@ -579,19 +581,6 @@ class WaitingActionRobustnessVerifier(InstantaneousActionRobustnessVerifier):
         declare_fail.add_effect(conflict, True)
         new_problem.add_action(declare_fail)
                 
-
-        # Initial state
-        eiv = problem.explicit_initial_values     
-        for fluent in eiv:
-            if fluent.is_dot():                
-                new_problem.set_initial_value(self.global_fluent_map.get_correct_version(fluent.agent(), fluent.args[0]), eiv[fluent])
-                for a in problem.agents:
-                    new_problem.set_initial_value(self.local_fluent_map[a].get_correct_version(fluent.agent(), fluent.args[0]), eiv[fluent])
-            else:
-                new_problem.set_initial_value(self.global_fluent_map.get_environment_version(fluent), eiv[fluent])
-                for a in problem.agents:
-                    new_problem.set_initial_value(self.local_fluent_map[a].get_environment_version(fluent), eiv[fluent])
-
         # Goal
         new_problem.add_goal(conflict)
 
@@ -893,21 +882,6 @@ class DurativeActionRobustnessVerifier(RobustnessVerifier):
                 a_waiting.add_condition(StartTiming(), waiting(self.get_agent_obj(agent)))
                 new_problem.add_action(a_waiting)
 
-
-
-
-
-        # Initial state
-        eiv = problem.explicit_initial_values     
-        for fluent in eiv:
-            if fluent.is_dot():                
-                new_problem.set_initial_value(self.global_fluent_map.get_correct_version(fluent.agent(), fluent.args[0]), eiv[fluent])
-                for a in problem.agents:
-                    new_problem.set_initial_value(self.local_fluent_map[a].get_correct_version(fluent.agent(), fluent.args[0]), eiv[fluent])
-            else:
-                new_problem.set_initial_value(self.global_fluent_map.get_environment_version(fluent), eiv[fluent])
-                for a in problem.agents:
-                    new_problem.set_initial_value(self.local_fluent_map[a].get_environment_version(fluent), eiv[fluent])
 
         # Goal
         new_problem.add_goal(failure)
