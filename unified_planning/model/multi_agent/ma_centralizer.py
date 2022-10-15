@@ -133,7 +133,7 @@ class MultiAgentProblemCentralizer(engines.engine.Engine, CompilerMixin):
         assert isinstance(problem, MultiAgentProblem)
 
         #Represents the map from the new action to the old action
-        new_to_old: Dict[Action, Action] = {}
+        new_to_old: Dict[Action, (Agent, Action)] = {}
 
         new_problem = Problem()
         new_problem.name = f'{self.name}_{problem.name}'
@@ -176,7 +176,7 @@ class MultiAgentProblemCentralizer(engines.engine.Engine, CompilerMixin):
                         for e in action.effects[timing]:
                             new_action.add_effect(timing, fsub.substitute(e.fluent, fmap, agent), e.value)
                 new_problem.add_action(new_action)
-                new_to_old[new_action] = action
+                new_to_old[new_action] = (agent, action)
 
         for goal in problem.goals:
             if goal.is_dot():                
