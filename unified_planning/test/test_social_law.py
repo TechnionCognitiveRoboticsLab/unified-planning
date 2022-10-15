@@ -74,7 +74,8 @@ class TestProblem(TestCase):
                 planner_name="fast-downward",
                 robustness_verifier_name="SimpleInstantaneousActionRobustnessVerifier"
                 )
-            self.assertEqual(slrc.is_robust(problem).status, t.expected_outcome, t.name)
+            r_result = slrc.is_robust(problem)
+            self.assertEqual(r_result.status, t.expected_outcome, t.name)
             if t.expected_outcome == SocialLawRobustnessStatus.ROBUST_RATIONAL:
                 presult = slrc.solve(problem)
                 self.assertIn(presult.status, POSITIVE_OUTCOMES, t.name)
