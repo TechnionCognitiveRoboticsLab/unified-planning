@@ -141,6 +141,8 @@ def get_example_problems():
     ma_loader = Example(problem=problem, plan=plan)
     problems["ma-loader"] = ma_loader    
 
+    return problems
+
 def get_intersection_problem(
     cars = ["car-north", "car-south", "car-east", "car-west"], 
     yields_list = [], 
