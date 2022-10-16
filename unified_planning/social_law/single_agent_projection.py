@@ -135,7 +135,7 @@ class SingleAgentProjection(engines.engine.Engine, CompilerMixin):
         eiv = problem.explicit_initial_values     
         for fluent in eiv:
             if fluent.is_dot():
-                if fluent.agent() == self.agent:
+                if fluent.agent().name == self.agent.name:
                     new_problem.set_initial_value(fluent.args[0], eiv[fluent])
             else:
                 new_problem.set_initial_value(fluent, eiv[fluent])
