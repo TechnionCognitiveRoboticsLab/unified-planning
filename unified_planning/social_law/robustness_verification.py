@@ -333,6 +333,7 @@ class SimpleInstantaneousActionRobustnessVerifier(InstantaneousActionRobustnessV
             end_s.add_effect(fin(self.get_agent_obj(agent)), True)
             end_s.add_effect(act, False)
             new_problem.add_action(end_s)
+            new_to_old[end_s] = None
 
             for i, goal in enumerate(self.get_agent_goal(problem, agent)):
                 end_f = InstantaneousAction("end_f_" + agent.name + "_" + str(i))
@@ -344,6 +345,7 @@ class SimpleInstantaneousActionRobustnessVerifier(InstantaneousActionRobustnessV
                 end_f.add_effect(act, False)
                 end_f.add_effect(failure, True)
                 new_problem.add_action(end_f)
+                new_to_old[end_f] = None
 
             for action in agent.actions:
                 # Success version - affects globals same way as original
@@ -358,7 +360,7 @@ class SimpleInstantaneousActionRobustnessVerifier(InstantaneousActionRobustnessV
                 for effect in action.effects:
                     a_s.add_effect(self.fsub.substitute(effect.fluent, self.global_fluent_map, agent), effect.value)
                 new_problem.add_action(a_s)
-                new_to_old[a_s] = (agent, action)
+                new_to_old[a_s] = action
 
                 real_preconds = self.get_action_preconditions(problem, agent, action, fail=True, wait=False)
                 
@@ -374,7 +376,7 @@ class SimpleInstantaneousActionRobustnessVerifier(InstantaneousActionRobustnessV
                     a_f.add_effect(failure, True)
                     a_f.add_effect(crash, True)
                     new_problem.add_action(a_f)
-                    new_to_old[a_f] = (agent, action)
+                    new_to_old[a_f] = action
 
                 # Wait version                
                 for i, fact in enumerate(self.get_action_preconditions(problem, agent, action, False, True)): 
@@ -388,21 +390,21 @@ class SimpleInstantaneousActionRobustnessVerifier(InstantaneousActionRobustnessV
                     a_w.add_effect(waiting(self.get_agent_obj(agent)), True)
                     a_w.add_effect(failure, True)
                     new_problem.add_action(a_w)
-                    new_to_old[a_w] = (agent, action)
+                    new_to_old[a_w] = action
 
                 # Phantom version            
                 a_pc = self.create_action_copy(problem, agent, action, "pc")
                 a_pc.add_precondition(act_pred)
                 a_pc.add_precondition(crash)
                 new_problem.add_action(a_pc)
-                new_to_old[a_pc] = (agent, action)
+                new_to_old[a_pc] = action
 
                 # Phantom version            
                 a_pw = self.create_action_copy(problem, agent, action, "pw")
                 a_pw.add_precondition(act_pred)
                 a_pw.add_precondition(waiting(self.get_agent_obj(agent)))
                 new_problem.add_action(a_pw)
-                new_to_old[a_pw] = (agent, action)
+                new_to_old[a_pw] = action
 
 
 
@@ -478,7 +480,7 @@ class WaitingActionRobustnessVerifier(InstantaneousActionRobustnessVerifier):
                 for effect in action.effects:
                     a_s.add_effect(self.fsub.substitute(effect.fluent, self.global_fluent_map, agent), effect.value)
                 new_problem.add_action(a_s)
-                new_to_old[a_s] = (agent, action)
+                new_to_old[a_s] = action
 
                 # Fail version
                 for i, fact in enumerate(self.get_action_preconditions(problem, agent, action, True, False)):
@@ -492,7 +494,7 @@ class WaitingActionRobustnessVerifier(InstantaneousActionRobustnessVerifier):
                     a_f.add_effect(stage_2, True)
                     a_f.add_effect(stage_1, False)
                     new_problem.add_action(a_f)
-                    new_to_old[a_f] = (agent, action)
+                    new_to_old[a_f] = action
 
                 for i, fact in enumerate(self.get_action_preconditions(problem, agent, action, False, True)):
                     # Wait version
@@ -503,7 +505,7 @@ class WaitingActionRobustnessVerifier(InstantaneousActionRobustnessVerifier):
                     assert not fact.is_not()
                     a_w.add_effect(self.fsub.substitute(fact, self.waiting_fluent_map, agent), True)  # , action.agent.obj), True)
                     new_problem.add_action(a_w)
-                    new_to_old[a_w] = (agent, action)
+                    new_to_old[a_w] = action
 
                     # deadlock version
                     a_deadlock = self.create_action_copy(problem, agent, action, "_deadlock_" + agent.name + "_" + str(i))
@@ -513,7 +515,7 @@ class WaitingActionRobustnessVerifier(InstantaneousActionRobustnessVerifier):
                     a_deadlock.add_effect(fin(self.get_agent_obj(agent)), True)
                     a_deadlock.add_effect(possible_deadlock, True)
                     new_problem.add_action(a_deadlock)
-                    new_to_old[a_deadlock] = (agent, action)
+                    new_to_old[a_deadlock] = action
                 
                 # local version
                 a_local = self.create_action_copy(problem, agent, action, "_local_" + agent.name)
@@ -522,7 +524,7 @@ class WaitingActionRobustnessVerifier(InstantaneousActionRobustnessVerifier):
                 for fluent in allow_action_map[agent.name].values():                    
                     a_local.add_effect(fluent, True)
                 new_problem.add_action(a_local)
-                new_to_old[a_local] = (agent, action)
+                new_to_old[a_local] = action
 
             #end-success        
             end_s = InstantaneousAction("end_s_" + agent.name)
@@ -532,6 +534,7 @@ class WaitingActionRobustnessVerifier(InstantaneousActionRobustnessVerifier):
             end_s.add_effect(fin(self.get_agent_obj(agent)), True)
             end_s.add_effect(stage_1, False)
             new_problem.add_action(end_s)
+            new_to_old[end_s] = None
 
         # start-stage-2
         start_stage_2 = InstantaneousAction("start_stage_2")
@@ -540,6 +543,7 @@ class WaitingActionRobustnessVerifier(InstantaneousActionRobustnessVerifier):
         start_stage_2.add_effect(stage_2, True)
         start_stage_2.add_effect(stage_1, False)
         new_problem.add_action(start_stage_2)
+        new_to_old[start_stage_2] = None
 
         # goals_not_achieved
         goals_not_achieved = InstantaneousAction("goals_not_achieved")
@@ -551,6 +555,7 @@ class WaitingActionRobustnessVerifier(InstantaneousActionRobustnessVerifier):
                     goals_not_achieved.add_precondition(self.fsub.substitute(g, self.local_fluent_map[agent], agent))
         goals_not_achieved.add_effect(conflict, True)
         new_problem.add_action(goals_not_achieved)
+        new_to_old[goals_not_achieved] = None
 
         # declare_deadlock
         declare_deadlock = InstantaneousAction("declare_deadlock")
@@ -562,6 +567,7 @@ class WaitingActionRobustnessVerifier(InstantaneousActionRobustnessVerifier):
                     declare_deadlock.add_precondition(self.fsub.substitute(goal, self.local_fluent_map[agent], agent))
         declare_deadlock.add_effect(conflict, True)
         new_problem.add_action(declare_deadlock)
+        new_to_old[declare_deadlock] = None
 
         # declare_fail
         declare_fail = InstantaneousAction("declare_fail")
@@ -573,6 +579,7 @@ class WaitingActionRobustnessVerifier(InstantaneousActionRobustnessVerifier):
                     declare_fail.add_precondition(self.fsub.substitute(goal, self.local_fluent_map[agent], agent))
         declare_fail.add_effect(conflict, True)
         new_problem.add_action(declare_fail)
+        new_to_old[declare_fail] = None
                 
         # Goal
         new_problem.add_goal(conflict)
@@ -695,6 +702,7 @@ class DurativeActionRobustnessVerifier(RobustnessVerifier):
             end_s_action.add_effect(fin(self.get_agent_obj(agent)), True)
             end_s_action.add_effect(act, False)
             new_problem.add_action(end_s_action)
+            new_to_old[end_s_action] = None
 
             # Create end_f_i action
             for j, gf in enumerate(self.get_agent_goal(problem, agent)):
@@ -707,6 +715,7 @@ class DurativeActionRobustnessVerifier(RobustnessVerifier):
                 end_f_action.add_effect(failure, True)
                 end_f_action.add_effect(act, False)
                 new_problem.add_action(end_f_action)
+                new_to_old[end_f_action] = None
 
 
             for action in agent.actions:                
@@ -747,7 +756,7 @@ class DurativeActionRobustnessVerifier(RobustnessVerifier):
                         for ag in problem.agents:
                             a_s.add_condition(ClosedDurationInterval(StartTiming(), EndTiming()), Not(self.fsub.substitute(effect.fluent, waiting_fluent_map[ag], agent)))
                 new_problem.add_action(a_s)
-                new_to_old[a_s] = (agent, action)
+                new_to_old[a_s] = action
 
                 # Fail start version            
                 for i, fact in enumerate(f_start):
@@ -758,7 +767,7 @@ class DurativeActionRobustnessVerifier(RobustnessVerifier):
                     a_fstart.add_condition(StartTiming(), Not(waiting(self.get_agent_obj(agent))))
                     a_fstart.add_effect(StartTiming(), failure, True)
                     new_problem.add_action(a_fstart)
-                    new_to_old[a_fstart] = (agent, action)
+                    new_to_old[a_fstart] = action
 
                 # Fail inv version            
                 for i, fact in enumerate(f_overall):
@@ -783,7 +792,7 @@ class DurativeActionRobustnessVerifier(RobustnessVerifier):
                         a_finv.add_condition(StartTiming(), Not(waiting(self.get_agent_obj(agent))))
                         a_finv.add_effect(StartTiming(), failure, True)
                         new_problem.add_action(a_finv)
-                        new_to_old[a_finv] = (agent, action)
+                        new_to_old[a_finv] = action
 
                 # Fail end version            
                 for i, fact in enumerate(f_end):
@@ -815,7 +824,7 @@ class DurativeActionRobustnessVerifier(RobustnessVerifier):
                     for c in c_overall:
                         a_fend.add_increase_effect(StartTiming(), self.fsub.substitute(c, inv_count_map, agent), 1)
                     new_problem.add_action(a_fend)
-                    new_to_old[a_fend] = (agent, action)
+                    new_to_old[a_fend] = action
 
                 # Del inv start version            
                 for i, effect in enumerate(action.effects.get(StartTiming(), [])):
@@ -827,7 +836,7 @@ class DurativeActionRobustnessVerifier(RobustnessVerifier):
                         a_finvstart.add_condition(StartTiming(), GT(self.fsub.substitute(effect.fluent, inv_count_map, agent), 0))
                         a_finvstart.add_effect(StartTiming(), failure, True)
                         new_problem.add_action(a_finvstart)
-                        new_to_old[a_finvstart] = (agent, action)
+                        new_to_old[a_finvstart] = action
 
                 # Del inv end version            
                 for i, effect in enumerate(action.effects.get(EndTiming(), [])):
@@ -863,7 +872,7 @@ class DurativeActionRobustnessVerifier(RobustnessVerifier):
                                 for fact in condition:
                                     a_finvend.add_increase_effect(StartTiming(), self.fsub.substitute(fact, inv_count_map, agent), 1)                                    
                         new_problem.add_action(a_finvend)
-                        new_to_old[a_finvend] = (agent, action)
+                        new_to_old[a_finvend] = action
                 
                 # a^w_x version - wait forever for x to be true
                 for i, w_fact in enumerate(w_start):
@@ -875,13 +884,13 @@ class DurativeActionRobustnessVerifier(RobustnessVerifier):
                     a_wx.add_condition(StartTiming(), Not(self.fsub.substitute(w_fact, self.global_fluent_map, agent)))
                     a_wx.add_effect(StartTiming(), self.fsub.substitute(w_fact, waiting_fluent_map[agent], agent), True)
                     new_problem.add_action(a_wx)
-                    new_to_old[a_wx] = (agent, action)
+                    new_to_old[a_wx] = action
 
                 # a_waiting version - dummy version while agent is waiting
                 a_waiting = self.create_action_copy(problem, agent, action, "waiting")
                 a_waiting.add_condition(StartTiming(), waiting(self.get_agent_obj(agent)))
                 new_problem.add_action(a_waiting)
-                new_to_old[a_waiting] = (agent, action)
+                new_to_old[a_waiting] = action
 
 
         # Goal
@@ -901,5 +910,5 @@ class DurativeActionRobustnessVerifier(RobustnessVerifier):
 
 env = up.environment.get_env()
 env.factory.add_engine('SimpleInstantaneousActionRobustnessVerifier', __name__, 'SimpleInstantaneousActionRobustnessVerifier')
-env.factory.add_engine('WaitingActionRobustnessVerifier', __name__, 'WaitingActionRobustnessVerifier')
+#env.factory.add_engine('WaitingActionRobustnessVerifier', __name__, 'WaitingActionRobustnessVerifier')
 env.factory.add_engine('DurativeActionRobustnessVerifier', __name__, 'DurativeActionRobustnessVerifier')
