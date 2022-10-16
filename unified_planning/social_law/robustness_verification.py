@@ -189,7 +189,7 @@ class RobustnessVerifier(engines.engine.Engine, CompilerMixin):
         #TODO: update when new API is available
         l = []
         for goal in problem.goals:
-            if goal.is_dot() and goal.agent() == agent:
+            if goal.is_dot() and goal.agent().name == agent.name:
                 l.append(goal)
         return l
 
