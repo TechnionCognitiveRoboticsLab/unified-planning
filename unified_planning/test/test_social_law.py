@@ -23,6 +23,7 @@ from unified_planning.social_law.waitfor_specification import WaitforSpecificati
 from unified_planning.social_law.ma_problem_waitfor import MultiAgentProblemWithWaitfor
 from unified_planning.model.multi_agent.ma_centralizer import MultiAgentProblemCentralizer
 from unified_planning.social_law.social_law import SocialLaw, SocialLawRobustnessChecker, SocialLawRobustnessStatus
+from unified_planning.social_law.synthesis import SocialLawGenerator
 from unified_planning.model.multi_agent import *
 from unified_planning.io import PDDLWriter
 from unified_planning.engines import PlanGenerationResultStatus
@@ -66,6 +67,12 @@ class TestProblem(TestCase):
             RobustnessTestCase("2cars_crash", SocialLawRobustnessStatus.NON_ROBUST_MULTI_AGENT_FAIL, cars=["car-north", "car-east"], yields_list=[], wait_drive=False),   
             RobustnessTestCase("2cars_robust", SocialLawRobustnessStatus.ROBUST_RATIONAL, cars=["car-north", "car-south"], yields_list=[], wait_drive=False)            
         ]
+
+    def test_synthesis(self):
+        problem = get_intersection_problem(["car-north", "car-east"], wait_drive=False).problem
+        g = SocialLawGenerator(problem)
+
+        g.generate_social_law()
 
     def test_social_law(self):
         slrc = SocialLawRobustnessChecker(
