@@ -60,10 +60,15 @@ class SocialLawRobustnessStatus(Enum):
 class SocialLawRobustnessResult(Result):
     status : SocialLawRobustnessStatus
     counter_example : Optional["up.plans.Plan"]
+    counter_example_orig_actions : Optional["up.plans.Plan"]
 
-    def __init__(self, status : SocialLawRobustnessStatus, counter_example : Optional["up.plans.Plan"]):
+    def __init__(self, 
+                status : SocialLawRobustnessStatus, 
+                counter_example : Optional["up.plans.Plan"], 
+                counter_example_orig_actions : Optional["up.plans.Plan"]):
         self.status = status
         self.counter_example = counter_example
+        self.counter_example_orig_actions = counter_example_orig_actions
     
 
 
@@ -169,18 +174,18 @@ class SocialLawRobustnessChecker(engines.engine.Engine, mixins.OneshotPlannerMix
 
                 orig_plan = result.plan.replace_action_instances(rbv_result.map_back_action_instance)
 
-                return SocialLawRobustnessResult(status, orig_plan)
+                return SocialLawRobustnessResult(status, result.plan, orig_plan)
             elif result.status in [PlanGenerationResultStatus.UNSOLVABLE_PROVEN, PlanGenerationResultStatus.UNSOLVABLE_INCOMPLETELY]:
-                return SocialLawRobustnessResult(SocialLawRobustnessStatus.ROBUST_RATIONAL, None)
+                return SocialLawRobustnessResult(SocialLawRobustnessStatus.ROBUST_RATIONAL, None, None)
             else:
-                return SocialLawRobustnessResult(SocialLawRobustnessStatus.UNKNOWN, None)
+                return SocialLawRobustnessResult(SocialLawRobustnessStatus.UNKNOWN, None, None)
 
 
     def is_robust(self, problem : MultiAgentProblemWithWaitfor) -> SocialLawRobustnessResult:
         status =  SocialLawRobustnessStatus.ROBUST_RATIONAL
         # Check single agent solvability
         if not self.is_single_agent_solvable(problem):
-            return SocialLawRobustnessResult(SocialLawRobustnessStatus.NON_ROBUST_SINGLE_AGENT, None)
+            return SocialLawRobustnessResult(SocialLawRobustnessStatus.NON_ROBUST_SINGLE_AGENT, None, None)
         
         # Check for rational robustness
         result = self.multi_agent_robustness_counterexample(problem)        
