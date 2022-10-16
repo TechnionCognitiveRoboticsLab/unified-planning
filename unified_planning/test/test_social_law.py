@@ -79,13 +79,20 @@ class TestProblem(TestCase):
         
         res = l.compile(p_4cars_crash)
         p_4cars_deadlock = res.problem
-        
+        self.assertEqual(len(p_4cars_crash.waitfor.waitfor_map), 0)
+        self.assertEqual(len(p_4cars_deadlock.waitfor.waitfor_map), 4)
+
         r_result = slrc.is_robust(p_4cars_deadlock)
         self.assertEqual(r_result.status, SocialLawRobustnessStatus.NON_ROBUST_MULTI_AGENT_DEADLOCK)
         r_result = slrc.is_robust(p_4cars_crash)
-        self.assertEqual(r_result.status, SocialLawRobustnessStatus.NON_ROBUST_MULTI_AGENT_FAIL)
-        self.assertEqual(len(p_4cars_crash.waitfor.waitfor_map), 0)
-        self.assertEqual(len(p_4cars_deadlock.waitfor.waitfor_map), 4)
+        self.assertEqual(r_result.status, SocialLawRobustnessStatus.NON_ROBUST_MULTI_AGENT_FAIL)        
+
+        l2 = SocialLaw()
+        l2.disallow_action("car-north", "drive", ["south-ent", "cross-se", "north"])
+        res = l2.compile(p_4cars_crash)
+        p_nosap = res.problem
+        r_result = slrc.is_robust(p_nosap)
+        self.assertEqual(r_result.status, SocialLawRobustnessStatus.NON_ROBUST_SINGLE_AGENT)
 
     def test_all_cases(self):
         for t in self.test_cases:

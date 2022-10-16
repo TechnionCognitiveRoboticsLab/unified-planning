@@ -14,6 +14,7 @@
 #
 """This module defines the social law class."""
 
+from collections import defaultdict
 import unified_planning as up
 from unified_planning.social_law.single_agent_projection import SingleAgentProjection
 from unified_planning.social_law.robustness_verification import SimpleInstantaneousActionRobustnessVerifier
@@ -267,6 +268,12 @@ class SocialLaw(engines.engine.Engine, CompilerMixin):
         engines.engine.Engine.__init__(self)
         CompilerMixin.__init__(self, CompilationKind.MA_SL_SOCIAL_LAW)
         self.added_waitfors = []
+        self.disallowed_actions = {}
+
+    def __repr__(self) -> str:
+        s = "added_waitfors: " + str(self.added_waitfors) + "\n" + \
+            "disallowd actions: " + str(self.disallowed_actions)
+        return s
                 
     @staticmethod
     def get_credits(**kwargs) -> Optional['Credits']:
@@ -355,6 +362,7 @@ class SocialLaw(engines.engine.Engine, CompilerMixin):
         if isinstance(problem, MultiAgentProblemWithWaitfor):
             new_problem.waitfor.waitfor_map = problem.waitfor.waitfor_map.copy()
 
+        # Add waitfor annotations
         for agent_name, action_name, precondition_fluent_name, pre_condition_args in self.added_waitfors:
             agent = new_problem.agent(agent_name)
             action = agent.action(action_name)
@@ -373,13 +381,40 @@ class SocialLaw(engines.engine.Engine, CompilerMixin):
                     raise UPUsageError("Don't know what parameter " + arg + " is in waitfor(" + agent_name + ", " + action_name + ")")
                 pre_condition_arg_objs.append(arg_obj)
 
-            precondition = precondition_fluent(pre_condition_arg_objs)
-
+            precondition = FluentExp(precondition_fluent, pre_condition_arg_objs)
             new_problem.waitfor.annotate_as_waitfor(agent_name, action_name, precondition)
+
+        # Disallow actions
+        for agent_name, action_name in self.disallowed_actions.keys():
+            agent = new_problem.agent(agent_name)
+            action = agent.action(action_name)
+            
+            allowed_fluent = Fluent("allowed__" + action.name, _signature = action.parameters)
+            agent.add_fluent(allowed_fluent, default_initial_value = True)
+            action.add_precondition(
+                FluentExp(allowed_fluent, action.parameters)
+            )
+            for disallowed_args in self.disallowed_actions[(agent_name, action_name)]:
+                arg_objs = []
+                for arg in disallowed_args:
+                    arg_obj = new_problem.object(arg)
+                    arg_objs.append(arg_obj)
+                new_problem.set_initial_value(
+                    FluentExp(allowed_fluent, arg_objs), 
+                    False
+                )
+
+
+
 
         return CompilerResult(
             new_problem, partial(replace_action, map=new_to_old), self.name
         )
 
     def add_waitfor_annotation(self, agent_name : str, action_name : str, precondition_fluent_name : str, pre_condition_args: List[str]):
-        self.added_waitfors.append( (agent_name, action_name, precondition_fluent_name, pre_condition_args))
+        self.added_waitfors.append( (agent_name, action_name, precondition_fluent_name, pre_condition_args) )
+
+    def disallow_action(self, agent_name : str, action_name : str, args: List[str]):
+        if (agent_name, action_name) not in self.disallowed_actions:
+            self.disallowed_actions[(agent_name, action_name)] = []    
+        self.disallowed_actions[(agent_name, action_name)].append(args)
