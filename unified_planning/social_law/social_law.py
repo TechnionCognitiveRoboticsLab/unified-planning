@@ -265,8 +265,9 @@ class SocialLaw(engines.engine.Engine, CompilerMixin):
     this class requires a (multi agent) problem with waitfors, and applies itself to restrict some actions, resulting in a modified multi agent problem with waitfors.'''
     def __init__(self):
         engines.engine.Engine.__init__(self)
-        CompilerMixin.__init__(self, CompilationKind.MA_SL_SOCIAL_LAW)                        
-        
+        CompilerMixin.__init__(self, CompilationKind.MA_SL_SOCIAL_LAW)
+        self.added_waitfors = []
+                
     @staticmethod
     def get_credits(**kwargs) -> Optional['Credits']:
         return credits
@@ -354,6 +355,27 @@ class SocialLaw(engines.engine.Engine, CompilerMixin):
         if isinstance(problem, MultiAgentProblemWithWaitfor):
             new_problem.waitfor.waitfor_map = problem.waitfor.waitfor_map.copy()
 
+        for agent_name, action_name, precondition_fluent_name, pre_condition_args in self.added_waitfors:
+            agent = new_problem.agent(agent_name)
+            action = agent.action(action_name)
+            if agent.has_fluent(precondition_fluent_name):
+                precondition_fluent = agent.fluent(precondition_fluent_name)
+            else:
+                assert(new_problem.ma_environment.has_fluent(precondition_fluent_name))
+                precondition_fluent = new_problem.ma_environment.fluent(precondition_fluent_name)
+            pre_condition_arg_objs = []
+            for arg in pre_condition_args:
+                #TODO: do we need to handle constant expression here?                
+                arg_obj = action.parameter(arg)
+                pre_condition_arg_objs.append(arg_obj)
+
+            precondition = precondition_fluent(pre_condition_arg_objs)
+
+            new_problem.waitfor.annotate_as_waitfor(agent_name, action_name, precondition)
+
         return CompilerResult(
             new_problem, partial(replace_action, map=new_to_old), self.name
         )
+
+    def add_waitfor_annotation(self, agent_name : str, action_name : str, precondition_fluent_name : str, pre_condition_args: List[str]):
+        self.added_waitfors.append( (agent_name, action_name, precondition_fluent_name, pre_condition_args))

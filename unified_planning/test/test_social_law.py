@@ -74,19 +74,18 @@ class TestProblem(TestCase):
             )
         p_4cars_crash = get_intersection_problem(wait_drive=False).problem
         l = SocialLaw()
+        for agent in p_4cars_crash.agents:
+            l.add_waitfor_annotation(agent.name, "drive", "free", ["l2"])
+        
         res = l.compile(p_4cars_crash)
         p_4cars_deadlock = res.problem
-        free = p_4cars_deadlock.ma_environment.fluent("free")
-        for agent in p_4cars_deadlock.agents:
-            drive = agent.action("drive")
-            l2 = drive.parameter("l2")            
-            p_4cars_deadlock.waitfor.annotate_as_waitfor(agent.name, drive.name, free(l2))
         
         r_result = slrc.is_robust(p_4cars_deadlock)
         self.assertEqual(r_result.status, SocialLawRobustnessStatus.NON_ROBUST_MULTI_AGENT_DEADLOCK)
         r_result = slrc.is_robust(p_4cars_crash)
         self.assertEqual(r_result.status, SocialLawRobustnessStatus.NON_ROBUST_MULTI_AGENT_FAIL)
         self.assertEqual(len(p_4cars_crash.waitfor.waitfor_map), 0)
+        self.assertEqual(len(p_4cars_deadlock.waitfor.waitfor_map), 4)
 
     def test_all_cases(self):
         for t in self.test_cases:
