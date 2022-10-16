@@ -364,9 +364,13 @@ class SocialLaw(engines.engine.Engine, CompilerMixin):
                 assert(new_problem.ma_environment.has_fluent(precondition_fluent_name))
                 precondition_fluent = new_problem.ma_environment.fluent(precondition_fluent_name)
             pre_condition_arg_objs = []
-            for arg in pre_condition_args:
-                #TODO: do we need to handle constant expression here?                
-                arg_obj = action.parameter(arg)
+            for arg in pre_condition_args:                
+                if arg in action._parameters:                
+                    arg_obj = action.parameter(arg)
+                elif new_problem.has_object(arg):
+                    arg_obj = new_problem.object(arg)
+                else:
+                    raise UPUsageError("Don't know what parameter " + arg + " is in waitfor(" + agent_name + ", " + action_name + ")")
                 pre_condition_arg_objs.append(arg_obj)
 
             precondition = precondition_fluent(pre_condition_arg_objs)
