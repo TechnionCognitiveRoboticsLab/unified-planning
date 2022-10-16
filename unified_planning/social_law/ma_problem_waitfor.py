@@ -14,6 +14,8 @@
 #
 """This module defines the multi agent problem with waitfor specification."""
 
+import unified_planning.environment
+from unified_planning.model.expression import ConstantExpression
 from unified_planning.social_law.waitfor_specification import WaitforSpecification
 from unified_planning.model.multi_agent.ma_problem import MultiAgentProblem
 from unified_planning.model.multi_agent.agent import Agent
@@ -26,9 +28,9 @@ class MultiAgentProblemWithWaitfor(MultiAgentProblem):
     def __init__(
         self,        
         name: str = None,
-        env: "up.environment.Environment" = None,
+        env: "unified_planning.environment.Environment" = None,
         *,
-        initial_defaults: Dict["up.model.types.Type", "ConstantExpression"] = {},
+        initial_defaults: Dict["unified_planning.model.types.Type", "ConstantExpression"] = {},
         waitfor : WaitforSpecification = None
     ):
         MultiAgentProblem.__init__(self, name=name, env=env, initial_defaults=initial_defaults)
