@@ -366,7 +366,7 @@ class SimpleInstantaneousActionRobustnessVerifier(InstantaneousActionRobustnessV
                 
                 # Fail version
                 for i, fact in enumerate(real_preconds):
-                    a_f = self.create_action_copy(problem, agent, action, "f_" + str(i))
+                    a_f = self.create_action_copy(problem, agent, action, "f" + str(i))
                     a_f.add_precondition(act_pred)
                     a_f.add_precondition(Not(waiting(self.get_agent_obj(agent))))
                     a_f.add_precondition(Not(crash))                    
@@ -380,7 +380,7 @@ class SimpleInstantaneousActionRobustnessVerifier(InstantaneousActionRobustnessV
 
                 # Wait version                
                 for i, fact in enumerate(self.get_action_preconditions(problem, agent, action, False, True)): 
-                    a_w = self.create_action_copy(problem, agent, action, "w_" + str(i))
+                    a_w = self.create_action_copy(problem, agent, action, "w" + str(i))
                     a_w.add_precondition(act_pred)
                     a_w.add_precondition(Not(crash))
                     a_w.add_precondition(Not(waiting(self.get_agent_obj(agent))))
@@ -472,7 +472,7 @@ class WaitingActionRobustnessVerifier(InstantaneousActionRobustnessVerifier):
         for agent in problem.agents:
             for action in agent.actions:            
                 # Success version - affects globals same way as original
-                a_s = self.create_action_copy(problem, agent, action, "_s_" + agent.name)
+                a_s = self.create_action_copy(problem, agent, action, "s" + agent.name)
                 a_s.add_precondition(stage_1)
                 a_s.add_precondition(allow_action_map[agent.name][action.name])
                 for fact in self.get_action_preconditions(problem, agent, action, True, True):
@@ -484,7 +484,7 @@ class WaitingActionRobustnessVerifier(InstantaneousActionRobustnessVerifier):
 
                 # Fail version
                 for i, fact in enumerate(self.get_action_preconditions(problem, agent, action, True, False)):
-                    a_f = self.create_action_copy(problem, agent, action, "_f_" + agent.name + "_" + str(i))
+                    a_f = self.create_action_copy(problem, agent, action, "f" + str(i))
                     a_f.add_precondition(stage_1)
                     a_f.add_precondition(allow_action_map[agent.name][action.name])
                     for pre in self.get_action_preconditions(problem, agent, action, False, True):
@@ -498,7 +498,7 @@ class WaitingActionRobustnessVerifier(InstantaneousActionRobustnessVerifier):
 
                 for i, fact in enumerate(self.get_action_preconditions(problem, agent, action, False, True)):
                     # Wait version
-                    a_w = self.create_action_copy(problem, agent, action, "_w_" + agent.name + "_" + str(i))
+                    a_w = self.create_action_copy(problem, agent, action, "w" + str(i))
                     a_w.add_precondition(stage_1)
                     a_w.add_precondition(allow_action_map[agent.name][action.name])
                     a_w.add_precondition(Not(self.fsub.substitute(fact, self.global_fluent_map, agent)))
@@ -508,7 +508,7 @@ class WaitingActionRobustnessVerifier(InstantaneousActionRobustnessVerifier):
                     new_to_old[a_w] = action
 
                     # deadlock version
-                    a_deadlock = self.create_action_copy(problem, agent, action, "_deadlock_" + agent.name + "_" + str(i))
+                    a_deadlock = self.create_action_copy(problem, agent, action, "d" + str(i))
                     a_deadlock.add_precondition(Not(self.fsub.substitute(fact, self.global_fluent_map, agent)))
                     for another_action in allow_action_map[agent.name].keys():
                         a_deadlock.add_precondition(Not(allow_action_map[agent.name][another_action]))
@@ -518,7 +518,7 @@ class WaitingActionRobustnessVerifier(InstantaneousActionRobustnessVerifier):
                     new_to_old[a_deadlock] = action
                 
                 # local version
-                a_local = self.create_action_copy(problem, agent, action, "_local_" + agent.name)
+                a_local = self.create_action_copy(problem, agent, action, "l")
                 a_local.add_precondition(stage_2)
                 a_local.add_precondition(allow_action_map[agent.name][action.name])
                 for fluent in allow_action_map[agent.name].values():                    
@@ -760,7 +760,7 @@ class DurativeActionRobustnessVerifier(RobustnessVerifier):
 
                 # Fail start version            
                 for i, fact in enumerate(f_start):
-                    a_fstart = self.create_action_copy(problem, agent, action, "f_start_" + str(i))
+                    a_fstart = self.create_action_copy(problem, agent, action, "fstart" + str(i))
                     for c in w_start:
                         a_fstart.add_condition(StartTiming(), self.fsub.substitute(c, self.global_fluent_map, agent))
                     a_fstart.add_condition(StartTiming(), Not(self.fsub.substitute(fact, self.global_fluent_map, agent)))
@@ -777,7 +777,7 @@ class DurativeActionRobustnessVerifier(RobustnessVerifier):
                             overall_condition_added_by_start_effect = True
                             break
                     if not overall_condition_added_by_start_effect:
-                        a_finv = self.create_action_copy(problem, agent, action, "f_inv_" + str(i))
+                        a_finv = self.create_action_copy(problem, agent, action, "finv" + str(i))
                         for c in c_start:
                             a_fstart.add_condition(StartTiming(), self.fsub.substitute(c, self.global_fluent_map, agent))
                         a_finv.add_condition(StartTiming(), Not(self.fsub.substitute(fact, self.global_fluent_map, agent)))
@@ -796,7 +796,7 @@ class DurativeActionRobustnessVerifier(RobustnessVerifier):
 
                 # Fail end version            
                 for i, fact in enumerate(f_end):
-                    a_fend = self.create_action_copy(problem, agent, action, "f_end_" + str(i))
+                    a_fend = self.create_action_copy(problem, agent, action, "fend" + str(i))
                     for c in c_start:
                         a_fend.add_condition(StartTiming(), self.fsub.substitute(c, self.global_fluent_map, agent))
                     for c in c_overall:
@@ -829,7 +829,7 @@ class DurativeActionRobustnessVerifier(RobustnessVerifier):
                 # Del inv start version            
                 for i, effect in enumerate(action.effects.get(StartTiming(), [])):
                     if effect.value.is_false():
-                        a_finvstart = self.create_action_copy(problem, agent, action, "f_inv_start_" + str(i))
+                        a_finvstart = self.create_action_copy(problem, agent, action, "finvstart" + str(i))
                         a_finvstart.add_condition(StartTiming(), Not(waiting(self.get_agent_obj(agent))))
                         for c in c_start:
                             a_finvstart.add_condition(StartTiming(), self.fsub.substitute(c, self.global_fluent_map, agent))
@@ -841,7 +841,7 @@ class DurativeActionRobustnessVerifier(RobustnessVerifier):
                 # Del inv end version            
                 for i, effect in enumerate(action.effects.get(EndTiming(), [])):
                     if effect.value.is_false():
-                        a_finvend = self.create_action_copy(problem, agent, action, "f_inv_end_" + str(i))
+                        a_finvend = self.create_action_copy(problem, agent, action, "finvend" + str(i))
                         a_finvend.add_condition(StartTiming(), Not(waiting(self.get_agent_obj(agent))))
                         for c in c_start:
                             a_finvend.add_condition(StartTiming(), self.fsub.substitute(c, self.global_fluent_map, agent))
@@ -876,7 +876,7 @@ class DurativeActionRobustnessVerifier(RobustnessVerifier):
                 
                 # a^w_x version - wait forever for x to be true
                 for i, w_fact in enumerate(w_start):
-                    a_wx = self.create_action_copy(problem, agent, action, "w_" + str(i))
+                    a_wx = self.create_action_copy(problem, agent, action, "w" + str(i))
                     a_wx.add_condition(StartTiming(), Not(waiting(self.get_agent_obj(agent))))
 
                     a_wx.add_effect(StartTiming(), failure, True)
@@ -887,7 +887,7 @@ class DurativeActionRobustnessVerifier(RobustnessVerifier):
                     new_to_old[a_wx] = action
 
                 # a_waiting version - dummy version while agent is waiting
-                a_waiting = self.create_action_copy(problem, agent, action, "waiting")
+                a_waiting = self.create_action_copy(problem, agent, action, "sw")
                 a_waiting.add_condition(StartTiming(), waiting(self.get_agent_obj(agent)))
                 new_problem.add_action(a_waiting)
                 new_to_old[a_waiting] = action
