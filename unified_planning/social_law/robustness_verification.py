@@ -14,9 +14,6 @@
 #
 """This module defines the robustness verification compiler classes"""
 
-#TODO - make sure handling of agent specific facts in goals (.args[0]) is correct
-
-
 import unified_planning as up
 import unified_planning.engines as engines
 from unified_planning.engines.mixins.compiler import CompilationKind, CompilerMixin
@@ -51,8 +48,6 @@ credits = Credits('Robustness Verification',
                   'Creates a planning problem which verifies the robustness of a multi-agent planning problem with given waitfor specification.',
                   'Creates a planning problem which verifies the robustness of a multi-agent planning problem with given waitfor specification.')
 
-
-
 class FluentMap():
     """ This class maintains a copy of each fluent in the given problem (environment and agent specific). Default value (if specified) is the default value for the new facts."""
     def __init__(self, prefix: str, default_value = None, override_type = None):
@@ -69,40 +64,21 @@ class FluentMap():
     def get_environment_version(self, fact):
         """get a copy of given environment fact
         """
-        # TODO: there must be a cleaner way to do this...
-        negate = False
-        if fact.is_not():
-            negate = True
-            fact = fact.arg(0)
         gfact = FluentExp(
             self.env_fluent_map[fact.fluent().name],
             fact.args)
-        if negate:
-            return Not(gfact)
-        else:
-            return gfact
+        return gfact
 
-    def get_agent_version(self, agent, fact):
+    def get_agent_version(self, agent : Agent, fact):
         """get the copy of given agent-specific agent.fact 
         """
-        # TODO: there must be a cleaner way to do this...
-        negate = False
-        if fact.is_not():
-            negate = True
-            fact = fact.arg(0)
         gfact = FluentExp(
             self.agent_fluent_map[agent.name, fact.fluent().name],
-            fact.args)
-        if negate:
-            return Not(gfact)
-        else:
-            return gfact   
+            fact.args)        
+        return gfact   
 
-    def get_correct_version(self, agent, fact):
-        cfact = fact
-        if fact.is_not():
-            cfact = fact.arg(0)
-        if cfact.fluent() in agent.fluents:
+    def get_correct_version(self, agent : Optional[Agent], fact):
+        if agent is not None and fact.fluent() in agent.fluents:
             return self.get_agent_version(agent, fact)
         else:
             return self.get_environment_version(fact)
@@ -145,8 +121,9 @@ class FluentMap():
 class FluentMapSubstituter(IdentityDagWalker):
     """Performs substitution according to the given FluentMap"""
 
-    def __init__(self, env: "unified_planning.environment.Environment"):
+    def __init__(self, problem : MultiAgentProblem ,env: "unified_planning.environment.Environment"):
         IdentityDagWalker.__init__(self, env, True)
+        self.problem = problem
         self.env = env
         self.manager = env.expression_manager
         self.type_checker = env.type_checker
@@ -154,14 +131,25 @@ class FluentMapSubstituter(IdentityDagWalker):
     def _get_key(self, expression, **kwargs):
         return expression
 
-    def substitute(self, expression: FNode, fmap: FluentMap, agent: Agent) -> FNode:
+    def substitute(self, expression: FNode, fmap: FluentMap, local_agent: Agent) -> FNode:
         """
         Performs substitution into the given expression, according to the given FluentMap
         """
-        return self.walk(expression, fmap=fmap, agent = agent)
+        return self.walk(expression, fmap=fmap, local_agent = local_agent)
+
+    def walk_dot(self, expression: FNode, args: List[FNode], **kwargs) -> FNode:
+        agent = expression.agent()
+        fact = expression.arg(0)
+        return kwargs["fmap"].get_agent_version(agent, fact)                    
 
     def walk_fluent_exp(self, expression: FNode, args: List[FNode], **kwargs) -> FNode:
-        return kwargs["fmap"].get_correct_version(kwargs["agent"], expression)
+        if expression.fluent() in self.problem.ma_environment.fluents:
+            return kwargs["fmap"].get_environment_version(expression)
+        
+        local_agent = kwargs["local_agent"]
+        if local_agent is not None and expression.fluent() in local_agent.fluents:
+            return kwargs["fmap"].get_agent_version(local_agent, expression)
+        return expression
 
 
 class RobustnessVerifier(engines.engine.Engine, CompilerMixin):
@@ -247,20 +235,16 @@ class RobustnessVerifier(engines.engine.Engine, CompilerMixin):
             self.local_fluent_map[agent] = FluentMap("l-" + agent.name)
             self.local_fluent_map[agent].add_facts(problem, new_problem)
 
-        self.fsub = FluentMapSubstituter(new_problem.env)
+        self.fsub = FluentMapSubstituter(problem, new_problem.env)
 
         # Initial state
         eiv = problem.explicit_initial_values     
         for fluent in eiv:
-            if fluent.is_dot():                
-                new_problem.set_initial_value(self.global_fluent_map.get_correct_version(fluent.agent(), fluent.args[0]), eiv[fluent])
-                for a in problem.agents:
-                    new_problem.set_initial_value(self.local_fluent_map[a].get_correct_version(fluent.agent(), fluent.args[0]), eiv[fluent])
-            else:
-                new_problem.set_initial_value(self.global_fluent_map.get_environment_version(fluent), eiv[fluent])
-                for a in problem.agents:
-                    new_problem.set_initial_value(self.local_fluent_map[a].get_environment_version(fluent), eiv[fluent])
-
+            gfluent = self.fsub.substitute(fluent, self.global_fluent_map, None)
+            new_problem.set_initial_value(gfluent, eiv[fluent])
+            for a in problem.agents:
+                lfluent = self.fsub.substitute(fluent, self.local_fluent_map[a], None)
+                new_problem.set_initial_value(lfluent, eiv[fluent])
         return new_problem
 
             
@@ -344,8 +328,8 @@ class SimpleInstantaneousActionRobustnessVerifier(InstantaneousActionRobustnessV
             end_s = InstantaneousAction("end_s_" + agent.name)
             end_s.add_precondition(Not(fin(self.get_agent_obj(agent))))            
             for goal in self.get_agent_goal(problem, agent):
-                end_s.add_precondition(self.global_fluent_map.get_correct_version(agent, goal.args[0]))
-                end_s.add_precondition(self.local_fluent_map[agent].get_correct_version(agent, goal.args[0]))
+                end_s.add_precondition(self.fsub.substitute(goal, self.global_fluent_map, agent))
+                end_s.add_precondition(self.fsub.substitute(goal, self.local_fluent_map[agent], agent))
             end_s.add_effect(fin(self.get_agent_obj(agent)), True)
             end_s.add_effect(act, False)
             new_problem.add_action(end_s)
@@ -353,9 +337,9 @@ class SimpleInstantaneousActionRobustnessVerifier(InstantaneousActionRobustnessV
             for i, goal in enumerate(self.get_agent_goal(problem, agent)):
                 end_f = InstantaneousAction("end_f_" + agent.name + "_" + str(i))
                 end_f.add_precondition(Not(fin(self.get_agent_obj(agent))))
-                end_f.add_precondition(Not(self.global_fluent_map.get_correct_version(agent, goal.args[0])))
+                end_f.add_precondition(Not(self.fsub.substitute(goal, self.global_fluent_map, agent)))
                 for g in self.get_agent_goal(problem, agent):                    
-                    end_f.add_precondition(self.local_fluent_map[agent].get_correct_version(agent, g.args[0]))
+                    end_f.add_precondition(self.fsub.substitute(g, self.local_fluent_map[agent], agent))
                 end_f.add_effect(fin(self.get_agent_obj(agent)), True)
                 end_f.add_effect(act, False)
                 end_f.add_effect(failure, True)
@@ -534,8 +518,8 @@ class WaitingActionRobustnessVerifier(InstantaneousActionRobustnessVerifier):
             #end-success        
             end_s = InstantaneousAction("end_s_" + agent.name)
             for goal in self.get_agent_goal(problem, agent):
-                end_s.add_precondition(self.global_fluent_map.get_correct_version(agent, goal.args[0]))
-                end_s.add_precondition(self.local_fluent_map[agent].get_correct_version(agent, goal.args[0]))
+                end_s.add_precondition(self.fsub.substitute(goal, self.global_fluent_map, agent))
+                end_s.add_precondition(self.fsub.substitute(goal, self.local_fluent_map[agent], agent))
             end_s.add_effect(fin(self.get_agent_obj(agent)), True)
             end_s.add_effect(stage_1, False)
             new_problem.add_action(end_s)
@@ -553,9 +537,9 @@ class WaitingActionRobustnessVerifier(InstantaneousActionRobustnessVerifier):
         goals_not_achieved.add_precondition(stage_2)
         for agent in problem.agents:
             for i, goal in enumerate(self.get_agent_goal(problem, agent)):
-                goals_not_achieved.add_precondition(Not(self.global_fluent_map.get_correct_version(agent, goal.args[0])))
+                goals_not_achieved.add_precondition(Not(self.fsub.substitute(goal, self.global_fluent_map, agent)))
                 for g in self.get_agent_goal(problem, agent):
-                    goals_not_achieved.add_precondition(self.local_fluent_map[agent].get_correct_version(agent, g.args[0]))
+                    goals_not_achieved.add_precondition(self.fsub.substitute(g, self.local_fluent_map[agent], agent))
         goals_not_achieved.add_effect(conflict, True)
         new_problem.add_action(goals_not_achieved)
 
@@ -566,7 +550,7 @@ class WaitingActionRobustnessVerifier(InstantaneousActionRobustnessVerifier):
         for agent in problem.agents:
             for i, goal in enumerate(self.get_agent_goal(problem, agent)):
                 for g in self.get_agent_goal(problem, agent):
-                    declare_deadlock.add_precondition(self.local_fluent_map[agent].get_correct_version(agent, g.args[0]))
+                    declare_deadlock.add_precondition(self.fsub.substitute(goal, self.local_fluent_map[agent], agent))
         declare_deadlock.add_effect(conflict, True)
         new_problem.add_action(declare_deadlock)
 
@@ -577,7 +561,7 @@ class WaitingActionRobustnessVerifier(InstantaneousActionRobustnessVerifier):
         for agent in problem.agents:
             for i, goal in enumerate(self.get_agent_goal(problem, agent)):
                 for g in self.get_agent_goal(problem, agent):
-                    declare_fail.add_precondition(self.local_fluent_map[agent].get_correct_version(agent, g.args[0]))
+                    declare_fail.add_precondition(self.fsub.substitute(goal, self.local_fluent_map[agent], agent))
         declare_fail.add_effect(conflict, True)
         new_problem.add_action(declare_fail)
                 
@@ -697,8 +681,8 @@ class DurativeActionRobustnessVerifier(RobustnessVerifier):
             end_s_action = InstantaneousAction("end_s_" + agent.name)
             end_s_action.add_precondition(Not(fin(self.get_agent_obj(agent))))
             for g in self.get_agent_goal(problem, agent):
-                end_s_action.add_precondition(self.local_fluent_map[agent].get_correct_version(agent, g.args[0]))
-                end_s_action.add_precondition(self.global_fluent_map.get_correct_version(agent, g.args[0]))
+                end_s_action.add_precondition(self.fsub.substitute(g, self.local_fluent_map[agent], agent))
+                end_s_action.add_precondition(self.fsub.substitute(g, self.global_fluent_map, agent))
             end_s_action.add_effect(fin(self.get_agent_obj(agent)), True)
             end_s_action.add_effect(act, False)
             new_problem.add_action(end_s_action)
@@ -706,10 +690,10 @@ class DurativeActionRobustnessVerifier(RobustnessVerifier):
             # Create end_f_i action
             for j, gf in enumerate(self.get_agent_goal(problem, agent)):
                 end_f_action = InstantaneousAction("end_f_" + agent.name + "_" + str(j))
-                end_f_action.add_precondition(Not(self.global_fluent_map.get_correct_version(agent, gf.args[0])))
+                end_f_action.add_precondition(Not(self.fsub.substitute(gf, self.global_fluent_map, agent)))
                 end_f_action.add_precondition(Not(fin(self.get_agent_obj(agent))))
                 for g in self.get_agent_goal(problem, agent):
-                    end_f_action.add_precondition(self.local_fluent_map[agent].get_correct_version(agent, g.args[0]))
+                    end_f_action.add_precondition(self.fsub.substitute(g, self.local_fluent_map[agent], agent))
                 end_f_action.add_effect(fin(self.get_agent_obj(agent)), True)
                 end_f_action.add_effect(failure, True)
                 end_f_action.add_effect(act, False)

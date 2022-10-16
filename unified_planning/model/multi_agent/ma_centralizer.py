@@ -127,7 +127,7 @@ class MultiAgentProblemCentralizer(engines.engine.Engine, CompilerMixin):
                 new_problem.set_initial_value(fmap.get_environment_version(fluent), eiv[fluent])
             
 
-        fsub = FluentMapSubstituter(new_problem.env)
+        fsub = FluentMapSubstituter(problem, new_problem.env)
         for agent in problem.agents:
             for action in agent.actions:
                 d = {}
