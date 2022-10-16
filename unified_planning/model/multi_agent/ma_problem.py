@@ -146,6 +146,7 @@ class MultiAgentProblem(
                 new_ag.add_fluent(f)
             for a in ag.actions:
                 new_ag.add_action(a.clone())
+            new_p.add_agent(new_ag)
         new_p._user_types = self._user_types[:]
         new_p._user_types_hierarchy = self._user_types_hierarchy.copy()
         new_p._objects = self._objects[:]
