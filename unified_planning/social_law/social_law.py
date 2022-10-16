@@ -38,6 +38,8 @@ from unified_planning.engines.mixins.oneshot_planner import OptimalityGuarantee
 from unified_planning.engines.results import *
 from unified_planning.engines.sequential_simulator import SequentialSimulator
 from unified_planning.model.multi_agent.ma_centralizer import MultiAgentProblemCentralizer
+from functools import partial
+from unified_planning.engines.compilers.utils import replace_action
 
 credits = Credits('Social Law',
                   'Technion Cognitive Robotics Lab (cf. https://github.com/TechnionCognitiveRoboticsLab)',
@@ -258,3 +260,100 @@ class SocialLawRobustnessChecker(engines.engine.Engine, mixins.OneshotPlannerMix
                                             plan=None,
                                             engine_name = self.name)
         
+class SocialLaw(engines.engine.Engine, CompilerMixin):
+    '''Social Law abstract class:
+    this class requires a (multi agent) problem with waitfors, and applies itself to restrict some actions, resulting in a modified multi agent problem with waitfors.'''
+    def __init__(self):
+        engines.engine.Engine.__init__(self)
+        CompilerMixin.__init__(self, CompilationKind.MA_SL_SOCIAL_LAW)                        
+        
+    @staticmethod
+    def get_credits(**kwargs) -> Optional['Credits']:
+        return credits
+
+    @property
+    def name(self):
+        return "sl"
+
+    @staticmethod
+    def supported_kind() -> ProblemKind:
+        supported_kind = ProblemKind()
+        supported_kind.set_problem_class("ACTION_BASED_MULTI_AGENT")
+        supported_kind.set_typing("FLAT_TYPING")
+        supported_kind.set_typing("HIERARCHICAL_TYPING")
+        supported_kind.set_numbers("CONTINUOUS_NUMBERS")
+        supported_kind.set_numbers("DISCRETE_NUMBERS")
+        supported_kind.set_problem_type("SIMPLE_NUMERIC_PLANNING")
+        supported_kind.set_problem_type("GENERAL_NUMERIC_PLANNING")
+        supported_kind.set_fluents_type("NUMERIC_FLUENTS")
+        supported_kind.set_fluents_type("OBJECT_FLUENTS")
+        supported_kind.set_conditions_kind("NEGATIVE_CONDITIONS")
+        supported_kind.set_conditions_kind("DISJUNCTIVE_CONDITIONS")
+        supported_kind.set_conditions_kind("EQUALITY")
+        supported_kind.set_conditions_kind("EXISTENTIAL_CONDITIONS")
+        supported_kind.set_conditions_kind("UNIVERSAL_CONDITIONS")
+        supported_kind.set_effects_kind("CONDITIONAL_EFFECTS")
+        supported_kind.set_effects_kind("INCREASE_EFFECTS")
+        supported_kind.set_effects_kind("DECREASE_EFFECTS")
+        supported_kind.set_time("CONTINUOUS_TIME")
+        supported_kind.set_time("DISCRETE_TIME")
+        supported_kind.set_time("INTERMEDIATE_CONDITIONS_AND_EFFECTS")
+        supported_kind.set_time("TIMED_EFFECT")
+        supported_kind.set_time("TIMED_GOALS")
+        supported_kind.set_time("DURATION_INEQUALITIES")
+        supported_kind.set_simulated_entities("SIMULATED_EFFECTS")
+        return supported_kind
+
+    @staticmethod
+    def supports(problem_kind):
+        return problem_kind <= SocialLaw.supported_kind()
+
+    @staticmethod
+    def supports_compilation(compilation_kind: CompilationKind) -> bool:
+        return compilation_kind == CompilationKind.MA_SL_SOCIAL_LAW
+
+    @staticmethod
+    def resulting_problem_kind(
+        problem_kind: ProblemKind, compilation_kind: Optional[CompilationKind] = None
+    ) -> ProblemKind:
+        new_kind = ProblemKind(problem_kind.features)    
+        new_kind.set_problem_class("ACTION_BASED")    
+        new_kind.unset_problem_class("ACTION_BASED_MULTI_AGENT")
+        return new_kind
+
+
+    def _compile(self, problem: "up.model.AbstractProblem", compilation_kind: "up.engines.CompilationKind") -> CompilerResult:
+        '''Creates a problem that is a copy of the original problem, modified by the self social law.'''
+        assert isinstance(problem, MultiAgentProblem)
+
+        #Represents the map from the new action to the old action
+        new_to_old: Dict[Action, Action] = {}
+
+        new_problem = MultiAgentProblemWithWaitfor()
+        new_problem.name = f'{self.name}_{problem.name}'
+
+        for f in problem.ma_environment.fluents:
+            default_val = problem.ma_environment.fluents_defaults[f]
+            new_problem.ma_environment.add_fluent(f, default_initial_value=default_val)
+        for ag in problem.agents:
+            new_ag = up.model.multi_agent.Agent(ag.name, new_problem)
+            for f in ag.fluents:
+                default_val = ag.fluents_defaults[f]
+                new_ag.add_fluent(f, default_initial_value=default_val)
+            for a in ag.actions:
+                new_action = a.clone()
+                new_ag.add_action(new_action)
+                new_to_old[new_action] = (ag, a)
+            new_problem.add_agent(new_ag)
+        new_problem._user_types = problem._user_types[:]
+        new_problem._user_types_hierarchy = problem._user_types_hierarchy.copy()
+        new_problem._objects = problem._objects[:]
+        new_problem._initial_value = problem._initial_value.copy()
+        new_problem._goals = problem._goals[:]
+        new_problem._initial_defaults = problem._initial_defaults.copy()
+        if isinstance(problem, MultiAgentProblemWithWaitfor):
+            new_problem.waitfor.waitfor_map = problem.waitfor.waitfor_map.copy()
+
+        return CompilerResult(
+            new_problem, partial(replace_action, map=new_to_old), self.name
+        )

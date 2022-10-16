@@ -22,7 +22,7 @@ from unified_planning.social_law.robustness_verification import RobustnessVerifi
 from unified_planning.social_law.waitfor_specification import WaitforSpecification
 from unified_planning.social_law.ma_problem_waitfor import MultiAgentProblemWithWaitfor
 from unified_planning.model.multi_agent.ma_centralizer import MultiAgentProblemCentralizer
-from unified_planning.social_law.social_law import SocialLawRobustnessChecker, SocialLawRobustnessStatus
+from unified_planning.social_law.social_law import SocialLaw, SocialLawRobustnessChecker, SocialLawRobustnessStatus
 from unified_planning.model.multi_agent import *
 from unified_planning.io import PDDLWriter
 from unified_planning.engines import PlanGenerationResultStatus
@@ -66,6 +66,27 @@ class TestProblem(TestCase):
             RobustnessTestCase("2cars_crash", SocialLawRobustnessStatus.NON_ROBUST_MULTI_AGENT_FAIL, cars=["car-north", "car-east"], yields_list=[], wait_drive=False),   
             RobustnessTestCase("2cars_robust", SocialLawRobustnessStatus.ROBUST_RATIONAL, cars=["car-north", "car-south"], yields_list=[], wait_drive=False)            
         ]
+
+    def test_social_law(self):
+        slrc = SocialLawRobustnessChecker(
+            planner_name="fast-downward",
+            robustness_verifier_name="SimpleInstantaneousActionRobustnessVerifier"
+            )
+        p_4cars_crash = get_intersection_problem(wait_drive=False).problem
+        l = SocialLaw()
+        res = l.compile(p_4cars_crash)
+        p_4cars_deadlock = res.problem
+        free = p_4cars_deadlock.ma_environment.fluent("free")
+        for agent in p_4cars_deadlock.agents:
+            drive = agent.action("drive")
+            l2 = drive.parameter("l2")            
+            p_4cars_deadlock.waitfor.annotate_as_waitfor(agent.name, drive.name, free(l2))
+        
+        r_result = slrc.is_robust(p_4cars_deadlock)
+        self.assertEqual(r_result.status, SocialLawRobustnessStatus.NON_ROBUST_MULTI_AGENT_DEADLOCK)
+        r_result = slrc.is_robust(p_4cars_crash)
+        self.assertEqual(r_result.status, SocialLawRobustnessStatus.NON_ROBUST_MULTI_AGENT_FAIL)
+        self.assertEqual(len(p_4cars_crash.waitfor.waitfor_map), 0)
 
     def test_all_cases(self):
         for t in self.test_cases:
