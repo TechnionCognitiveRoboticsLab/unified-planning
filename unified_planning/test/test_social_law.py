@@ -80,6 +80,20 @@ class TestProblem(TestCase):
                 presult = slrc.solve(problem)
                 self.assertIn(presult.status, POSITIVE_OUTCOMES, t.name)
 
+    def test_all_cases_waiting(self):
+        for t in self.test_cases:
+            problem = get_intersection_problem(t.cars, t.yields_list, t.wait_drive, durative=False).problem
+            slrc = SocialLawRobustnessChecker(
+                planner_name="fast-downward",
+                robustness_verifier_name="WaitingActionRobustnessVerifier"
+                )
+            r_result = slrc.is_robust(problem)
+            self.assertEqual(r_result.status, t.expected_outcome, t.name)
+            if t.expected_outcome == SocialLawRobustnessStatus.ROBUST_RATIONAL:
+                presult = slrc.solve(problem)
+                self.assertIn(presult.status, POSITIVE_OUTCOMES, t.name)
+
+
     def test_centralizer(self):
         for t in self.test_cases:
             for durative in [False]:# True]:
