@@ -101,10 +101,15 @@ class SocialLawGenerator:
                 continue
             else:
                 # We have a counter example, generate a successor for removing each of the actions that appears there
-                for ai in robustness_result.counter_example.actions:                    
-                    print(ai)
-                    l = SocialLaw()
-                    #l.disallow_action()
+                for i, ai in enumerate(robustness_result.counter_example_orig_actions.actions):
+                    compiled_action_instance = robustness_result.counter_example.actions[i]
+                    parts = compiled_action_instance.action.name.split("_")
+                    agent_name = parts[1]
+                    action_name = ai.action.name
+                    l = SocialLaw()                    
+                    l.disallow_action(agent_name, action_name, list(map(str, ai.actual_parameters)))
+                    successor_problem = l.compile(current_node.problem).problem
+                    open.push(SearchNode(successor_problem))
 
 
 

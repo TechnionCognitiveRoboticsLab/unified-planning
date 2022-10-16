@@ -165,10 +165,10 @@ class SocialLawRobustnessChecker(engines.engine.Engine, mixins.OneshotPlannerMix
             if result.status in unified_planning.engines.results.POSITIVE_OUTCOMES:                
                 for action_occurence in result.plan.actions:
                     parts = action_occurence.action.name.split("_")
-                    if parts[0] == "f":
+                    if parts[0][0] == "f":
                         status = SocialLawRobustnessStatus.NON_ROBUST_MULTI_AGENT_FAIL
                         break
-                    elif parts[0] == "w":
+                    elif parts[0][0] == "w":
                         status = SocialLawRobustnessStatus.NON_ROBUST_MULTI_AGENT_DEADLOCK            
                         break
 
