@@ -24,7 +24,7 @@ from unified_planning.model import Parameter, Fluent, InstantaneousAction, probl
 from unified_planning.shortcuts import *
 from unified_planning.exceptions import UPProblemDefinitionError
 from unified_planning.model import Problem, InstantaneousAction, DurativeAction, Action
-from typing import Type, List, Dict, Callable
+from typing import Type, List, Dict, Callable, OrderedDict
 from enum import Enum, auto
 from unified_planning.io import PDDLWriter, PDDLReader
 from unified_planning.engines import Credits
@@ -269,10 +269,14 @@ class SocialLaw(engines.engine.Engine, CompilerMixin):
         CompilerMixin.__init__(self, CompilationKind.MA_SL_SOCIAL_LAW)
         self.added_waitfors = []
         self.disallowed_actions = {}
+        self.new_fluents = []
+        self.new_fluent_initial_val = []
 
     def __repr__(self) -> str:
         s = "added_waitfors: " + str(self.added_waitfors) + "\n" + \
-            "disallowd actions: " + str(self.disallowed_actions)
+            "disallowd actions: " + str(self.disallowed_actions) + "\n" + \
+            "new fluents: " + str(self.new_fluents) + "\n" + \
+            "new fluents initial vals: " + str(self.new_fluent_initial_val)
         return s
                 
     @staticmethod
@@ -362,6 +366,36 @@ class SocialLaw(engines.engine.Engine, CompilerMixin):
         if isinstance(problem, MultiAgentProblemWithWaitfor):
             new_problem.waitfor.waitfor_map = problem.waitfor.waitfor_map.copy()
 
+        # New fluents
+        for agent_name, fluent_name, signature, default_val in self.new_fluents:
+            new_signature = OrderedDict()
+            for pname, ptype_name in signature.items():
+                if ptype_name is not None:
+                    ptype = new_problem.user_type(ptype_name)
+                new_signature[pname] = ptype
+            new_f = Fluent(fluent_name, _signature = new_signature)
+            if agent_name is not None:
+                agent = new_problem.agent(agent_name)
+                agent.add_fluent(new_f, default_initial_value = default_val)    
+            else:
+                new_problem.ma_environment.add_fluent(new_f, default_initial_value = default_val)
+
+        # new fluent initial values
+        for agent_name, fluent_name, args, val in self.new_fluent_initial_val:
+            if agent_name is not None:
+                agent = new_problem.agent(agent_name)
+                fluent = agent.fluent(fluent_name)
+            else:
+                fluent = new_problem.ma_environment.fluent(fluent_name)
+            arg_objs = []
+            for arg in args:
+                arg_obj = new_problem.object(arg)
+                arg_objs.append(arg_obj)
+            new_problem.set_initial_value(
+                FluentExp(fluent, arg_objs), 
+                val)
+            
+
         # Add waitfor annotations
         for agent_name, action_name, precondition_fluent_name, pre_condition_args in self.added_waitfors:
             agent = new_problem.agent(agent_name)
@@ -418,3 +452,17 @@ class SocialLaw(engines.engine.Engine, CompilerMixin):
         if (agent_name, action_name) not in self.disallowed_actions:
             self.disallowed_actions[(agent_name, action_name)] = []    
         self.disallowed_actions[(agent_name, action_name)].append(args)
+
+    def add_new_fluent(self, agent_name : Optional[str], fluent_name : str, signature: OrderedDict[str, Optional[str]], default_val):
+        self.new_fluents.append( (agent_name, fluent_name, signature, default_val) )
+
+    def set_initial_value_for_new_fluent(self, agent_name : Optional[str], fluent_name : str, args: List[str], val):      
+        is_new_fluent = False
+        for n_agent_name, n_fluent_name, _, _ in self.new_fluents:
+            if agent_name == n_agent_name and fluent_name == n_fluent_name:
+                is_new_fluent = True
+                break
+        if not is_new_fluent:
+            raise UPUsageError("must only set initial values for new fluents")
+        self.new_fluent_initial_val.append( ( agent_name, fluent_name, args, val) )
+        

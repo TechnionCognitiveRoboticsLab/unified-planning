@@ -82,17 +82,26 @@ class TestProblem(TestCase):
         self.assertEqual(len(p_4cars_crash.waitfor.waitfor_map), 0)
         self.assertEqual(len(p_4cars_deadlock.waitfor.waitfor_map), 4)
 
-        r_result = slrc.is_robust(p_4cars_deadlock)
-        self.assertEqual(r_result.status, SocialLawRobustnessStatus.NON_ROBUST_MULTI_AGENT_DEADLOCK)
-        r_result = slrc.is_robust(p_4cars_crash)
-        self.assertEqual(r_result.status, SocialLawRobustnessStatus.NON_ROBUST_MULTI_AGENT_FAIL)        
+        # r_result = slrc.is_robust(p_4cars_deadlock)
+        # self.assertEqual(r_result.status, SocialLawRobustnessStatus.NON_ROBUST_MULTI_AGENT_DEADLOCK)
+        # r_result = slrc.is_robust(p_4cars_crash)
+        # self.assertEqual(r_result.status, SocialLawRobustnessStatus.NON_ROBUST_MULTI_AGENT_FAIL)        
 
         l2 = SocialLaw()
         l2.disallow_action("car-north", "drive", ["south-ent", "cross-se", "north"])
         res = l2.compile(p_4cars_crash)
         p_nosap = res.problem
-        r_result = slrc.is_robust(p_nosap)
-        self.assertEqual(r_result.status, SocialLawRobustnessStatus.NON_ROBUST_SINGLE_AGENT)
+
+        # r_result = slrc.is_robust(p_nosap)
+        # self.assertEqual(r_result.status, SocialLawRobustnessStatus.NON_ROBUST_SINGLE_AGENT)
+
+        l3 = SocialLaw()
+        l3.add_new_fluent(None, "yieldsto", {"l1":"loc", "l2":"loc"}, False)
+        for loc1,loc2 in [("south-ent", "cross-ne"),("north-ent", "cross-sw"),("east-ent", "cross-nw"),("west-ent", "cross-se")]:
+            l3.set_initial_value_for_new_fluent(None, "yieldsto", [loc1, loc2], True)
+        res = l3.compile(p_4cars_deadlock)
+        p_robust = res.problem
+        self.assertEquals(len(p_robust.ma_environment.fluents), len(p_4cars_deadlock.ma_environment.fluents) + 1)
 
     def test_all_cases(self):
         for t in self.test_cases:
