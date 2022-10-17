@@ -54,10 +54,10 @@ class SocialLaw(engines.engine.Engine, CompilerMixin):
         engines.engine.Engine.__init__(self)
         CompilerMixin.__init__(self, CompilationKind.MA_SL_SOCIAL_LAW)
         self.added_waitfors = set()
-        self.disallowed_actions = {}
+        self.disallowed_actions = set()
         self.new_fluents = set()
         self.new_fluent_initial_val = set()
-        self.added_action_parameters = {}
+        self.added_action_parameters = set()
         self.added_preconditions = set()
         self.new_objects = set()
 
@@ -72,7 +72,13 @@ class SocialLaw(engines.engine.Engine, CompilerMixin):
         return s
 
     def __hash__(self) -> int:
-        return hash(str(self))
+        return hash(frozenset(self.added_waitfors)) + \
+                hash(frozenset(self.disallowed_actions)) + \
+                hash(frozenset(self.new_fluents)) + \
+                hash(frozenset(self.new_fluent_initial_val)) + \
+                hash(frozenset(self.added_action_parameters)) + \
+                hash(frozenset(self.added_preconditions)) + \
+                hash(frozenset(self.new_objects))
 
     def __eq__(self, oth) -> bool:
         if not isinstance(oth, SocialLaw):
@@ -87,13 +93,13 @@ class SocialLaw(engines.engine.Engine, CompilerMixin):
 
     def clone(self):
         l = SocialLaw()
-        l.added_waitfors = self.added_waitfors
-        l.disallowed_actions = self.disallowed_actions
-        l.new_fluents = self.new_fluents
-        l.new_fluent_initial_val = self.new_fluent_initial_val
-        l.added_action_parameters = self.added_action_parameters
-        l.added_preconditions = self.added_preconditions
-        l.new_objects = self.new_objects
+        l.added_waitfors = self.added_waitfors.copy()
+        l.disallowed_actions = self.disallowed_actions.copy()
+        l.new_fluents = self.new_fluents.copy()
+        l.new_fluent_initial_val = self.new_fluent_initial_val.copy()
+        l.added_action_parameters = self.added_action_parameters.copy()
+        l.added_preconditions = self.added_preconditions.copy()
+        l.new_objects = self.new_objects.copy()
 
         return l
                 
@@ -224,15 +230,15 @@ class SocialLaw(engines.engine.Engine, CompilerMixin):
                 val)
 
         # Added action parameters
-        for agent_name, action_name in self.added_action_parameters.keys():
+        for agent_name, action_name, param_name, param_type_name in self.added_action_parameters:
             agent = new_problem.agent(agent_name)
             action = agent.action(action_name)
-            for param_name, param_type_name in self.added_action_parameters.get( (ag.name, a.name), []):
-                if param_type_name is not None:
-                    param_type = new_problem.user_type(param_type_name)
-                    action._parameters[param_name] = Parameter(param_name, param_type)
-                else:
-                    action._parameters[param_name] = Parameter(param_name)
+            
+            if param_type_name is not None:
+                param_type = new_problem.user_type(param_type_name)
+                action._parameters[param_name] = Parameter(param_name, param_type)
+            else:
+                action._parameters[param_name] = Parameter(param_name)
             
         # Add action preconditions
         for agent_name, action_name, precondition_fluent_name, pre_condition_args in self.added_preconditions:
@@ -278,7 +284,7 @@ class SocialLaw(engines.engine.Engine, CompilerMixin):
             new_problem.waitfor.annotate_as_waitfor(agent_name, action_name, precondition)
 
         # Disallow actions
-        for agent_name, action_name in self.disallowed_actions.keys():
+        for agent_name, action_name, disallowed_args in self.disallowed_actions:
             agent = new_problem.agent(agent_name)
             action = agent.action(action_name)
             
@@ -291,15 +297,15 @@ class SocialLaw(engines.engine.Engine, CompilerMixin):
                 )
             else:
                 allowed_fluent = agent.fluent(allowed_name)
-            for disallowed_args in self.disallowed_actions[(agent_name, action_name)]:
-                arg_objs = []
-                for arg in disallowed_args:
-                    arg_obj = new_problem.object(arg)
-                    arg_objs.append(arg_obj)
-                new_problem.set_initial_value(
-                    FluentExp(allowed_fluent, arg_objs), 
-                    False
-                )
+            
+            arg_objs = []
+            for arg in disallowed_args:
+                arg_obj = new_problem.object(arg)
+                arg_objs.append(arg_obj)
+            new_problem.set_initial_value(
+                FluentExp(allowed_fluent, arg_objs), 
+                False
+            )
 
         return CompilerResult(
             new_problem, partial(replace_action, map=new_to_old), self.name
@@ -309,9 +315,7 @@ class SocialLaw(engines.engine.Engine, CompilerMixin):
         self.added_waitfors.add( (agent_name, action_name, precondition_fluent_name, pre_condition_args) )
 
     def disallow_action(self, agent_name : str, action_name : str, args: Tuple[str]):
-        if (agent_name, action_name) not in self.disallowed_actions:
-            self.disallowed_actions[(agent_name, action_name)] = set()
-        self.disallowed_actions[(agent_name, action_name)].add(args)
+        self.disallowed_actions.add( (agent_name, action_name, args) )
 
     def add_new_fluent(self, agent_name : Optional[str], fluent_name : str, signature: Tuple[str, Optional[str]], default_val):
         self.new_fluents.add( (agent_name, fluent_name, signature, default_val) )
@@ -327,9 +331,7 @@ class SocialLaw(engines.engine.Engine, CompilerMixin):
         self.new_fluent_initial_val.add( ( agent_name, fluent_name, args, val) )
         
     def add_parameter_to_action(self, agent_name : str, action_name : str, parameter_name : str, parameter_type_name : Optional[str]):
-        if (agent_name, action_name) not in self.added_action_parameters:
-            self.added_action_parameters[(agent_name, action_name)] = set()      
-        self.added_action_parameters[(agent_name, action_name)].add(  (parameter_name, parameter_type_name) )
+        self.added_action_parameters.add( (agent_name, action_name, parameter_name, parameter_type_name) )
 
     def add_precondition_to_action(self, agent_name : str, action_name : str, precondition_fluent_name : str, pre_condition_args: Tuple[str]):
         self.added_preconditions.add( (agent_name, action_name, precondition_fluent_name, pre_condition_args) )
