@@ -17,6 +17,7 @@ from unified_planning.model.fnode import FNode
 from unified_planning.model.multi_agent.agent import Agent
 from typing import Dict, List
 import json
+import copy
 
 class WaitforSpecification:
     """ This is the waitfor specification class, which enables managing/reading/writing the specification of the waitfor precondtions"""
@@ -48,6 +49,12 @@ class WaitforSpecification:
 
     def __hash__(self) -> int:
         return hash(self.waitfor_map)
+
+    def clone(self):
+        new_w = WaitforSpecification()
+        for agent_name, action_name in self.waitfor_map:
+            new_w.waitfor_map[(agent_name, action_name)] = self.waitfor_map[(agent_name, action_name)][:]
+        return new_w
 
 
 
