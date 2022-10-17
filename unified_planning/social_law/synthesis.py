@@ -44,6 +44,7 @@ import queue
 from dataclasses import dataclass, field
 from typing import Any
 from itertools import chain, combinations
+from unified_planning.model.walkers import FreeVarsExtractor
 
 credits = Credits('Social Law Synthesis',
                   'Technion Cognitive Robotics Lab (cf. https://github.com/TechnionCognitiveRoboticsLab)',
@@ -62,7 +63,7 @@ class SocialLawGeneratorSearch(Enum):
 def get_gbfs_social_law_generator():
     return SocialLawGenerator(SocialLawGeneratorSearch.GBFS, 
                             heuristic = StatisticsHeuristic(), 
-                            preferred_operator_heuristics = [EarlyPOHeuristic()])
+                            preferred_operator_heuristics = [EarlyPOHeuristic(), PublicActionsPOHeuristic()])
 
 @dataclass(order=True)
 class SearchNode:
@@ -82,8 +83,11 @@ class Heuristic:
     def get_priority(self, node : SearchNode):
         raise NotImplementedError()
 
+    def report_current_problem(self, problem : MultiAgentProblemWithWaitfor):
+        pass
+
     def report_current_node(self, node : SearchNode, robustness_result : SocialLawRobustnessResult):
-        raise NotImplementedError()
+        pass
 
 class StatisticsHeuristic(Heuristic):
     def __init__(self, before_fail_weight = 2, after_fail_weight = 1):
@@ -141,6 +145,40 @@ class EarlyPOHeuristic(Heuristic):
                 if parts[0][0] in ["w","f"]:
                     break
                 self.early_actions.add( (agent_name, ai.action.name, args_as_str) )
+
+class PublicActionsPOHeuristic(Heuristic):
+    def __init__(self):
+        Heuristic.__init__(self)
+        self.public_actions = set()
+
+    def get_priority(self, node : SearchNode) -> int:
+        for agent_name, action_name, _ in node.social_law.disallowed_actions:
+            if (agent_name, action_name) not in self.public_actions:
+                # 1 Indicates not preferred
+                return 1
+        # 0 Indicates preferred
+        return 0
+
+    def report_current_problem(self, problem: MultiAgentProblemWithWaitfor):
+        fve = FreeVarsExtractor()
+        for agent in problem.agents:
+            for action in agent.actions:
+                public = False
+                for precondition in action.preconditions:
+                    fluents = fve.get(precondition)
+                    for f in fluents:
+                        if f.fluent() in problem.ma_environment.fluents:
+                            public = True
+                            break
+                for effect in action.effects:
+                    if effect.fluent.fluent() in problem.ma_environment.fluents:
+                        public = True
+                        break
+                if public:
+                    self.public_actions.add( (agent.name, action.name) )
+
+
+
 
 class POQueue:
     def get_single_queue(self):
@@ -215,6 +253,9 @@ class SocialLawGenerator:
     def generate_social_law(self, initial_problem : MultiAgentProblemWithWaitfor):
         robustness_checker = SocialLawRobustnessChecker()        
         self.init_counters()
+
+        for h in self.all_heuristics:
+            h.report_current_problem(initial_problem)
 
         open = POQueue(len(self.po), self.search)
         closed : Set[SocialLaw] = set()

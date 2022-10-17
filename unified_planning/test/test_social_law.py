@@ -138,8 +138,8 @@ class TestProblem(TestCase):
         l.disallow_action("a2", "move", ("ne","nw"))
         l.disallow_action("a2", "move", ("se","sw"))
         pr = l.compile(problem).problem
-        prr = slrc.is_robust(pr)
-        self.assertEqual(prr.status,SocialLawRobustnessStatus.ROBUST_RATIONAL)
+        # prr = slrc.is_robust(pr)
+        # self.assertEqual(prr.status,SocialLawRobustnessStatus.ROBUST_RATIONAL)
 
         l2 = SocialLaw()
         l.disallow_action("a1", "move", ("nw","ne"))
@@ -148,13 +148,13 @@ class TestProblem(TestCase):
         self.assertTrue(l.is_stricter_than(l2))
         self.assertFalse(l2.is_stricter_than(l))
 
-        g1 = SocialLawGenerator(SocialLawGeneratorSearch.BFS)
-        rprob1 = g1.generate_social_law(problem)
-        self.assertIsNotNone(rprob1)
+        # g1 = SocialLawGenerator(SocialLawGeneratorSearch.BFS)
+        # rprob1 = g1.generate_social_law(problem)
+        # self.assertIsNotNone(rprob1)
 
-        g2 = SocialLawGenerator(SocialLawGeneratorSearch.DFS)
-        rprob2 = g2.generate_social_law(problem)
-        self.assertIsNotNone(rprob2)
+        # g2 = SocialLawGenerator(SocialLawGeneratorSearch.DFS)
+        # rprob2 = g2.generate_social_law(problem)
+        # self.assertIsNotNone(rprob2)
 
         g3 = get_gbfs_social_law_generator()
         rprob3 = g3.generate_social_law(problem)
