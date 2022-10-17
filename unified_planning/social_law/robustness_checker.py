@@ -142,6 +142,11 @@ class SocialLawRobustnessChecker(engines.engine.Engine, mixins.OneshotPlannerMix
             sap = SingleAgentProjection(agent)        
             result = sap.compile(problem)
 
+            if self._save_pddl:
+                w = PDDLWriter(result.problem)
+                w.write_domain("sap__" + agent.name + "__domain.pddl")
+                w.write_problem("sap__" + agent.name + "__problem.pddl")            
+
             with OneshotPlanner(name=self._planner_name, problem_kind=result.problem.kind) as planner:
                 presult = planner.solve(result.problem)
                 if presult.status not in unified_planning.engines.results.POSITIVE_OUTCOMES:                    
@@ -157,8 +162,8 @@ class SocialLawRobustnessChecker(engines.engine.Engine, mixins.OneshotPlannerMix
 
         if self._save_pddl:
             w = PDDLWriter(rbv_result.problem)
-            w.write_domain("domain.pddl")
-            w.write_problem("problem.pddl")            
+            w.write_domain(rbv.name + "__domain.pddl")
+            w.write_problem(rbv.name + "__problem.pddl")            
         
         with OneshotPlanner(name=self._planner_name, problem_kind=rbv_result.problem.kind) as planner:
             result = planner.solve(rbv_result.problem)
