@@ -141,10 +141,19 @@ class TestProblem(TestCase):
         prr = slrc.is_robust(pr)
         self.assertEqual(prr.status,SocialLawRobustnessStatus.ROBUST_RATIONAL)
 
+        l2 = SocialLaw()
+        l.disallow_action("a1", "move", ("nw","ne"))
+        l.disallow_action("a2", "move", ("ne","nw"))
+
+        self.assertTrue(l.is_stricter_than(l2))
+        self.assertFalse(l2.is_stricter_than(l))
+
 
         g = SocialLawGenerator(problem)
 
         rprob = g.generate_social_law()
+
+
         self.assertIsNotNone(rprob)
         
 
