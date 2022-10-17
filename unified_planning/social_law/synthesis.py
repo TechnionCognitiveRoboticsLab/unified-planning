@@ -23,7 +23,7 @@ from unified_planning.social_law.robustness_checker import SocialLawRobustnessCh
 from unified_planning.model import Parameter, Fluent, InstantaneousAction, problem_kind
 from unified_planning.exceptions import UPProblemDefinitionError
 from unified_planning.model import Problem, InstantaneousAction, DurativeAction, Action
-from typing import Type, List, Dict, Callable, OrderedDict
+from typing import Type, List, Dict, Callable, OrderedDict, Set
 from enum import Enum, auto
 from unified_planning.io import PDDLWriter, PDDLReader
 from unified_planning.engines import Credits
@@ -80,7 +80,7 @@ class SocialLawGenerator:
     """ This class takes in a multi agent problem (possibly with social laws), and searches for a social law which will turn it robust."""
     def __init__(self, initial_problem : MultiAgentProblemWithWaitfor):
         self._initial_problem = initial_problem
-        self.robustness_checker = SocialLawRobustnessChecker()
+        self.robustness_checker = SocialLawRobustnessChecker()        
 
     @property
     def initial_problem(self) -> MultiAgentProblemWithWaitfor:
@@ -88,7 +88,8 @@ class SocialLawGenerator:
 
     def generate_social_law(self):
         open = Queue()
-        closed = set()
+        closed : Set[SocialLaw] = set()
+        infeasible_sap : Set[SocialLaw] = set()
         empty_social_law = SocialLaw()
         open.push( SearchNode(empty_social_law) )
 
@@ -98,6 +99,11 @@ class SocialLawGenerator:
             if current_sl not in closed:
                 closed.add(current_sl)
                 
+                # Check that this isn't stricter than a social law for while the single agent projection is not solvable
+                for infeasible_sl in infeasible_sap:
+                    if current_sl.is_stricter_than(infeasible_sl):
+                        continue
+
                 current_problem = current_sl.compile(self.initial_problem).problem
                 robustness_result = self.robustness_checker.is_robust(current_problem)
 
@@ -106,7 +112,7 @@ class SocialLawGenerator:
                     return current_node
                 elif robustness_result.status == SocialLawRobustnessStatus.NON_ROBUST_SINGLE_AGENT:
                     # We made one of the single agent problems unsolvable - this is a dead end (for this simple search)
-                    continue
+                    infeasible_sap.add(current_sl)                    
                 else:
                     # We have a counter example, generate a successor for removing each of the actions that appears there
                     for i, ai in enumerate(robustness_result.counter_example_orig_actions.actions):

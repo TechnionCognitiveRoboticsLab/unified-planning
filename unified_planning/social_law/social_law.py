@@ -102,6 +102,13 @@ class SocialLaw(engines.engine.Engine, CompilerMixin):
         l.new_objects = self.new_objects.copy()
 
         return l
+
+    def is_stricter_than(self, other ) -> bool:
+        return other.added_waitfors.issubset(self.added_waitfors) and \
+                other.disallowed_actions.issubset(self.disallowed_actions) and \
+                other.added_preconditions.issubset(self.added_preconditions) and \
+                other.new_fluent_initial_val == self.new_fluent_initial_val
+
                 
     @staticmethod
     def get_credits(**kwargs) -> Optional['Credits']:
