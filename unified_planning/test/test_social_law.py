@@ -19,10 +19,11 @@ from unified_planning.test import TestCase, main
 from unified_planning.test.examples.multi_agent import get_example_problems, get_intersection_problem
 from unified_planning.social_law.single_agent_projection import SingleAgentProjection
 from unified_planning.social_law.robustness_verification import RobustnessVerifier, SimpleInstantaneousActionRobustnessVerifier, WaitingActionRobustnessVerifier
+from unified_planning.social_law.robustness_checker import SocialLawRobustnessChecker, SocialLawRobustnessStatus
+from unified_planning.social_law.social_law import SocialLaw
 from unified_planning.social_law.waitfor_specification import WaitforSpecification
 from unified_planning.social_law.ma_problem_waitfor import MultiAgentProblemWithWaitfor
 from unified_planning.model.multi_agent.ma_centralizer import MultiAgentProblemCentralizer
-from unified_planning.social_law.social_law import SocialLaw, SocialLawRobustnessChecker, SocialLawRobustnessStatus
 from unified_planning.social_law.synthesis import SocialLawGenerator
 from unified_planning.model.multi_agent import *
 from unified_planning.io import PDDLWriter
@@ -69,10 +70,65 @@ class TestProblem(TestCase):
         ]
 
     def test_synthesis(self):
-        problem = get_intersection_problem(["car-north", "car-east"], wait_drive=False).problem
+        problem = MultiAgentProblemWithWaitfor()
+        
+        loc = UserType("loc")
+    
+        # Environment     
+        connected = Fluent('connected', BoolType(), l1=loc, l2=loc)        
+        problem.ma_environment.add_fluent(connected, default_initial_value=False)
+
+        free = Fluent('free', BoolType(), l=loc)
+        problem.ma_environment.add_fluent(free, default_initial_value=True)
+
+        nw, ne, sw, se = Object("nw", loc), Object("ne", loc), Object("sw", loc), Object("se", loc)        
+        problem.add_objects([nw, ne, sw, se])
+        problem.set_initial_value(connected(nw, ne), True)
+        problem.set_initial_value(connected(nw, sw), True)
+        problem.set_initial_value(connected(ne, nw), True)
+        problem.set_initial_value(connected(ne, se), True)
+        problem.set_initial_value(connected(sw, se), True)
+        problem.set_initial_value(connected(sw, nw), True)
+        problem.set_initial_value(connected(se, sw), True)
+        problem.set_initial_value(connected(se, ne), True)
+
+
+        at = Fluent('at', BoolType(), l1=loc)
+
+        move = InstantaneousAction('move', l1=loc, l2=loc)
+        l1 = move.parameter('l1')
+        l2 = move.parameter('l2')
+        move.add_precondition(at(l1))
+        move.add_precondition(free(l2))
+        move.add_precondition(connected(l1,l2))
+        move.add_effect(at(l2),True)
+        move.add_effect(free(l2), False)
+        move.add_effect(at(l1), False)
+        move.add_effect(free(l1), True)    
+
+        agent1 = Agent("a1", problem)
+        problem.add_agent(agent1)
+        agent1.add_fluent(at, default_initial_value=False)
+        agent1.add_action(move)
+
+        agent2 = Agent("a2", problem)
+        problem.add_agent(agent2)
+        agent2.add_fluent(at, default_initial_value=False)
+        agent2.add_action(move)
+
+        problem.set_initial_value(Dot(agent1, at(nw)), True)
+        problem.set_initial_value(Dot(agent2, at(se)), True)
+        problem.set_initial_value(free(nw), False)
+        problem.set_initial_value(free(se), False)
+
+        problem.add_goal(Dot(agent1, at(sw)))
+        problem.add_goal(Dot(agent2, at(ne)))
+
+
         g = SocialLawGenerator(problem)
 
-        g.generate_social_law()
+        rprob = g.generate_social_law()
+        print(rprob)
 
     def test_social_law(self):
         slrc = SocialLawRobustnessChecker(
