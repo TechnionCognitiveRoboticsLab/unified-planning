@@ -243,7 +243,7 @@ class SocialLawGenerator:
 
                 if robustness_result.status == SocialLawRobustnessStatus.ROBUST_RATIONAL:
                     # We found a robust social law - return
-                    return current_node
+                    return current_node.social_law
                 elif robustness_result.status == SocialLawRobustnessStatus.NON_ROBUST_SINGLE_AGENT:
                     # We made one of the single agent problems unsolvable - this is a dead end (for this simple search)
                     infeasible_sap.add(current_sl)                    
