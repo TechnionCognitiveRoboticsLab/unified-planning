@@ -188,7 +188,7 @@ class SocialLaw(engines.engine.Engine, CompilerMixin):
         new_problem._goals = problem._goals[:]
         new_problem._initial_defaults = problem._initial_defaults.copy()
         if isinstance(problem, MultiAgentProblemWithWaitfor):
-            new_problem.waitfor.waitfor_map = problem.waitfor.waitfor_map.copy()
+            new_problem._waitfor = problem.waitfor.clone()
 
         # New objects
         for obj_name, obj_type_name in self.new_objects:
@@ -292,9 +292,10 @@ class SocialLaw(engines.engine.Engine, CompilerMixin):
             if not agent.has_fluent(allowed_name): # this could have been added by a previously applied SL
                 allowed_fluent = Fluent("allowed__" + action.name, _signature = action.parameters)
                 agent.add_fluent(allowed_fluent, default_initial_value = True)
-                action.add_precondition(
-                    FluentExp(allowed_fluent, action.parameters)
-                )
+                allowed_precondition = FluentExp(allowed_fluent, action.parameters)
+                action.add_precondition(allowed_precondition)
+                # Make sure to annotate this as waitfor, as otherwise the compilation can fail by trying a disallowed action
+                new_problem.waitfor.annotate_as_waitfor(agent_name, action_name, allowed_precondition)
             else:
                 allowed_fluent = agent.fluent(allowed_name)
             
@@ -303,9 +304,9 @@ class SocialLaw(engines.engine.Engine, CompilerMixin):
                 arg_obj = new_problem.object(arg)
                 arg_objs.append(arg_obj)
             new_problem.set_initial_value(
-                FluentExp(allowed_fluent, arg_objs), 
+                Dot(agent, FluentExp(allowed_fluent, arg_objs)), 
                 False
-            )
+            )            
 
         return CompilerResult(
             new_problem, partial(replace_action, map=new_to_old), self.name

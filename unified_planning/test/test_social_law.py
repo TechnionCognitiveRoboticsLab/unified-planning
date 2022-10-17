@@ -110,11 +110,13 @@ class TestProblem(TestCase):
         problem.add_agent(agent1)
         agent1.add_fluent(at, default_initial_value=False)
         agent1.add_action(move)
+        problem.waitfor.annotate_as_waitfor(agent1.name, move.name, free(l2))
 
         agent2 = Agent("a2", problem)
         problem.add_agent(agent2)
         agent2.add_fluent(at, default_initial_value=False)
         agent2.add_action(move)
+        problem.waitfor.annotate_as_waitfor(agent2.name, move.name, free(l2))
 
         problem.set_initial_value(Dot(agent1, at(nw)), True)
         problem.set_initial_value(Dot(agent2, at(se)), True)
@@ -125,10 +127,26 @@ class TestProblem(TestCase):
         problem.add_goal(Dot(agent2, at(ne)))
 
 
+        slrc = SocialLawRobustnessChecker(
+            planner_name="fast-downward",
+            robustness_verifier_name="SimpleInstantaneousActionRobustnessVerifier",
+            save_pddl=True
+            )
+        l = SocialLaw()
+        l.disallow_action("a1", "move", ("nw","ne"))
+        l.disallow_action("a1", "move", ("sw","se"))
+        l.disallow_action("a2", "move", ("ne","nw"))
+        l.disallow_action("a2", "move", ("se","sw"))
+        pr = l.compile(problem).problem
+        prr = slrc.is_robust(pr)
+        self.assertEqual(prr.status,SocialLawRobustnessStatus.ROBUST_RATIONAL)
+
+
         g = SocialLawGenerator(problem)
 
         rprob = g.generate_social_law()
-        print(rprob)
+        self.assertIsNotNone(rprob)
+        
 
     def test_social_law(self):
         slrc = SocialLawRobustnessChecker(

@@ -14,7 +14,7 @@
 #
 """This module defines the social law synthesis functionality."""
 
-from collections import defaultdict
+from collections import defaultdict, deque
 import unified_planning as up
 from unified_planning.shortcuts import *
 from unified_planning.social_law.ma_problem_waitfor import MultiAgentProblemWithWaitfor
@@ -64,7 +64,7 @@ class Queue:
     """ This class represents a queue for the open list"""
 
     def __init__(self):
-        self.items : List[SearchNode] = []
+        self.items : deque[SearchNode] = []
 
     def push(self, n : SearchNode):
         self.items.append(n)
