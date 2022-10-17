@@ -138,7 +138,7 @@ class TestProblem(TestCase):
         p_4cars_crash = get_intersection_problem(wait_drive=False).problem
         l = SocialLaw()
         for agent in p_4cars_crash.agents:
-            l.add_waitfor_annotation(agent.name, "drive", "free", ["l2"])
+            l.add_waitfor_annotation(agent.name, "drive", "free", ("l2",)  )
         
         res = l.compile(p_4cars_crash)
         p_4cars_deadlock = res.problem
@@ -151,7 +151,7 @@ class TestProblem(TestCase):
         self.assertEqual(r_result.status, SocialLawRobustnessStatus.NON_ROBUST_MULTI_AGENT_FAIL)        
 
         l2 = SocialLaw()
-        l2.disallow_action("car-north", "drive", ["south-ent", "cross-se", "north"])
+        l2.disallow_action("car-north", "drive", ("south-ent", "cross-se", "north") )
         res = l2.compile(p_4cars_crash)
         p_nosap = res.problem
 
@@ -159,18 +159,18 @@ class TestProblem(TestCase):
         self.assertEqual(r_result.status, SocialLawRobustnessStatus.NON_ROBUST_SINGLE_AGENT)
 
         l3 = SocialLaw()        
-        l3.add_new_fluent(None, "yieldsto", {"l1":"loc", "l2":"loc"}, False)
+        l3.add_new_fluent(None, "yieldsto", (("l1","loc"), ("l2","loc")), False)
         l3.add_new_object("dummy_loc", "loc")
         for loc1,loc2 in [("south-ent", "cross-ne"),("north-ent", "cross-sw"),("east-ent", "cross-nw"),("west-ent", "cross-se")]:
-            l3.set_initial_value_for_new_fluent(None, "yieldsto", [loc1, loc2], True)
+            l3.set_initial_value_for_new_fluent(None, "yieldsto", (loc1, loc2), True)
         for loc in p_4cars_crash.objects(p_4cars_crash.user_type("loc")):
             if loc.name not in ["south-ent", "north-ent", "east-ent", "west-ent"]:
-                l3.set_initial_value_for_new_fluent(None, "yieldsto", [loc.name, "dummy_loc"], True)
+                l3.set_initial_value_for_new_fluent(None, "yieldsto", (loc.name, "dummy_loc"), True)
         for agent in p_4cars_crash.agents:
             l3.add_parameter_to_action(agent.name, "drive", "ly", "loc")            
-            l3.add_precondition_to_action(agent.name, "drive", "yieldsto", ["l1", "ly"])
-            l3.add_precondition_to_action(agent.name, "drive", "free", ["ly"])
-            l3.add_waitfor_annotation(agent.name, "drive", "free", ["ly"])
+            l3.add_precondition_to_action(agent.name, "drive", "yieldsto", ("l1", "ly") )            
+            l3.add_precondition_to_action(agent.name, "drive", "free", ("ly",) )
+            l3.add_waitfor_annotation(agent.name, "drive", "free", ("ly",) )
         res = l3.compile(p_4cars_deadlock)
         p_robust = res.problem
         r_result = slrc.is_robust(p_robust)

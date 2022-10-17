@@ -53,13 +53,13 @@ class SocialLaw(engines.engine.Engine, CompilerMixin):
     def __init__(self):
         engines.engine.Engine.__init__(self)
         CompilerMixin.__init__(self, CompilationKind.MA_SL_SOCIAL_LAW)
-        self.added_waitfors = []
+        self.added_waitfors = set()
         self.disallowed_actions = {}
-        self.new_fluents = []
-        self.new_fluent_initial_val = []
+        self.new_fluents = set()
+        self.new_fluent_initial_val = set()
         self.added_action_parameters = {}
-        self.added_preconditions = []
-        self.new_objects = []
+        self.added_preconditions = set()
+        self.new_objects = set()
 
     def __repr__(self) -> str:
         s = "added_waitfors: " + str(self.added_waitfors) + "\n" + \
@@ -70,6 +70,32 @@ class SocialLaw(engines.engine.Engine, CompilerMixin):
             "added preconditions: " + str(self.added_preconditions) + "\n" + \
             "new objects: " + str(self.new_objects)
         return s
+
+    def __hash__(self) -> int:
+        return hash(str(self))
+
+    def __eq__(self, oth) -> bool:
+        if not isinstance(oth, SocialLaw):
+            return False
+        return self.added_waitfors == oth.added_waitfors and \
+            self.disallowed_actions == oth.disallowed_actions and \
+            self.new_fluents == oth.new_fluents and \
+            self.new_fluent_initial_val == oth.new_fluent_initial_val and \
+            self.added_action_parameters == oth.added_action_parameters and \
+            self.added_preconditions == oth.added_preconditions and \
+            self.new_objects == oth.new_objects
+
+    def clone(self):
+        l = SocialLaw()
+        l.added_waitfors = self.added_waitfors
+        l.disallowed_actions = self.disallowed_actions
+        l.new_fluents = self.new_fluents
+        l.new_fluent_initial_val = self.new_fluent_initial_val
+        l.added_action_parameters = self.added_action_parameters
+        l.added_preconditions = self.added_preconditions
+        l.new_objects = self.new_objects
+
+        return l
                 
     @staticmethod
     def get_credits(**kwargs) -> Optional['Credits']:
@@ -169,8 +195,10 @@ class SocialLaw(engines.engine.Engine, CompilerMixin):
         # New fluents
         for agent_name, fluent_name, signature, default_val in self.new_fluents:
             new_signature = OrderedDict()
-            for pname, ptype_name in signature.items():
-                if ptype_name is not None:
+            for param in signature:
+                pname = param[0]
+                if len(param) == 2:
+                    ptype_name = param[1]
                     ptype = new_problem.user_type(ptype_name)
                 new_signature[pname] = ptype
             new_f = Fluent(fluent_name, _signature = new_signature)
@@ -277,18 +305,18 @@ class SocialLaw(engines.engine.Engine, CompilerMixin):
             new_problem, partial(replace_action, map=new_to_old), self.name
         )
 
-    def add_waitfor_annotation(self, agent_name : str, action_name : str, precondition_fluent_name : str, pre_condition_args: List[str]):
-        self.added_waitfors.append( (agent_name, action_name, precondition_fluent_name, pre_condition_args) )
+    def add_waitfor_annotation(self, agent_name : str, action_name : str, precondition_fluent_name : str, pre_condition_args: Tuple[str]):
+        self.added_waitfors.add( (agent_name, action_name, precondition_fluent_name, pre_condition_args) )
 
-    def disallow_action(self, agent_name : str, action_name : str, args: List[str]):
+    def disallow_action(self, agent_name : str, action_name : str, args: Tuple[str]):
         if (agent_name, action_name) not in self.disallowed_actions:
-            self.disallowed_actions[(agent_name, action_name)] = list()
-        self.disallowed_actions[(agent_name, action_name)].append(args)
+            self.disallowed_actions[(agent_name, action_name)] = set()
+        self.disallowed_actions[(agent_name, action_name)].add(args)
 
-    def add_new_fluent(self, agent_name : Optional[str], fluent_name : str, signature: OrderedDict[str, Optional[str]], default_val):
-        self.new_fluents.append( (agent_name, fluent_name, signature, default_val) )
+    def add_new_fluent(self, agent_name : Optional[str], fluent_name : str, signature: Tuple[str, Optional[str]], default_val):
+        self.new_fluents.add( (agent_name, fluent_name, signature, default_val) )
 
-    def set_initial_value_for_new_fluent(self, agent_name : Optional[str], fluent_name : str, args: List[str], val):      
+    def set_initial_value_for_new_fluent(self, agent_name : Optional[str], fluent_name : str, args: Tuple[str], val):      
         is_new_fluent = False
         for n_agent_name, n_fluent_name, _, _ in self.new_fluents:
             if agent_name == n_agent_name and fluent_name == n_fluent_name:
@@ -296,15 +324,15 @@ class SocialLaw(engines.engine.Engine, CompilerMixin):
                 break
         if not is_new_fluent:
             raise UPUsageError("must only set initial values for new fluents")
-        self.new_fluent_initial_val.append( ( agent_name, fluent_name, args, val) )
+        self.new_fluent_initial_val.add( ( agent_name, fluent_name, args, val) )
         
     def add_parameter_to_action(self, agent_name : str, action_name : str, parameter_name : str, parameter_type_name : Optional[str]):
         if (agent_name, action_name) not in self.added_action_parameters:
-            self.added_action_parameters[(agent_name, action_name)] = list()      
-        self.added_action_parameters[(agent_name, action_name)].append(  (parameter_name, parameter_type_name) )
+            self.added_action_parameters[(agent_name, action_name)] = set()      
+        self.added_action_parameters[(agent_name, action_name)].add(  (parameter_name, parameter_type_name) )
 
-    def add_precondition_to_action(self, agent_name : str, action_name : str, precondition_fluent_name : str, pre_condition_args: List[str]):
-        self.added_preconditions.append( (agent_name, action_name, precondition_fluent_name, pre_condition_args) )
+    def add_precondition_to_action(self, agent_name : str, action_name : str, precondition_fluent_name : str, pre_condition_args: Tuple[str]):
+        self.added_preconditions.add( (agent_name, action_name, precondition_fluent_name, pre_condition_args) )
 
     def add_new_object(self, obj_name : str, obj_type_name : Optional[str]):
-        self.new_objects.append( (obj_name, obj_type_name))
+        self.new_objects.add( (obj_name, obj_type_name))

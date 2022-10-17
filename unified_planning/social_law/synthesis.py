@@ -53,12 +53,12 @@ credits = Credits('Social Law Synthesis',
 class SearchNode:
     """ This class represents a node in the search for a robust social law."""
 
-    def __init__(self, problem : MultiAgentProblemWithWaitfor):
-        self._problem = problem
+    def __init__(self, sl : SocialLaw):
+        self.sl = sl
 
     @property
-    def problem(self) -> MultiAgentProblemWithWaitfor:
-        return self._problem
+    def social_law(self) -> SocialLaw:
+        return self.sl
 
 class Queue:
     """ This class represents a queue for the open list"""
@@ -88,29 +88,36 @@ class SocialLawGenerator:
 
     def generate_social_law(self):
         open = Queue()
-        open.push( SearchNode(self.initial_problem) )
+        closed = set()
+        empty_social_law = SocialLaw()
+        open.push( SearchNode(empty_social_law) )
 
         while not open.empty():
             current_node = open.pop()
-            
-            robustness_result = self.robustness_checker.is_robust(current_node.problem)
-            if robustness_result.status == SocialLawRobustnessStatus.ROBUST_RATIONAL:
-                # We found a robust social law - return
-                return current_node
-            elif robustness_result.status == SocialLawRobustnessStatus.NON_ROBUST_SINGLE_AGENT:
-                # We made one of the single agent problems unsolvable - this is a dead end (for this simple search)
-                continue
-            else:
-                # We have a counter example, generate a successor for removing each of the actions that appears there
-                for i, ai in enumerate(robustness_result.counter_example_orig_actions.actions):
-                    compiled_action_instance = robustness_result.counter_example.actions[i]
-                    parts = compiled_action_instance.action.name.split("_")
-                    agent_name = parts[1]
-                    action_name = ai.action.name
-                    l = SocialLaw()                    
-                    l.disallow_action(agent_name, action_name, list(map(str, ai.actual_parameters)))
-                    successor_problem = l.compile(current_node.problem).problem
-                    open.push(SearchNode(successor_problem))
+            current_sl = current_node.social_law
+            if current_sl not in closed:
+                closed.add(current_sl)
+                
+                current_problem = current_sl.compile(self.initial_problem).problem
+                robustness_result = self.robustness_checker.is_robust(current_problem)
+
+                if robustness_result.status == SocialLawRobustnessStatus.ROBUST_RATIONAL:
+                    # We found a robust social law - return
+                    return current_node
+                elif robustness_result.status == SocialLawRobustnessStatus.NON_ROBUST_SINGLE_AGENT:
+                    # We made one of the single agent problems unsolvable - this is a dead end (for this simple search)
+                    continue
+                else:
+                    # We have a counter example, generate a successor for removing each of the actions that appears there
+                    for i, ai in enumerate(robustness_result.counter_example_orig_actions.actions):
+                        compiled_action_instance = robustness_result.counter_example.actions[i]
+                        parts = compiled_action_instance.action.name.split("_")
+                        agent_name = parts[1]
+                        action_name = ai.action.name
+
+                        succ_sl = current_sl.clone()
+                        succ_sl.disallow_action(agent_name, action_name, tuple(map(str, ai.actual_parameters)))                        
+                        open.push(SearchNode(succ_sl))
 
 
 
