@@ -43,7 +43,7 @@ from unified_planning.engines.compilers.utils import replace_action
 import queue
 from dataclasses import dataclass, field
 from typing import Any
-
+from itertools import chain, combinations
 
 credits = Credits('Social Law Synthesis',
                   'Technion Cognitive Robotics Lab (cf. https://github.com/TechnionCognitiveRoboticsLab)',
@@ -52,6 +52,17 @@ credits = Credits('Social Law Synthesis',
                   'Apache License, Version 2.0',
                   'Provides the ability to automatically generate a robust social law.',
                   'Provides the ability to automatically generate a robust social law.')
+
+class SocialLawGeneratorSearch(Enum):
+    BFS = auto()
+    DFS = auto()
+    GBFS = auto()
+
+
+def get_gbfs_social_law_generator():
+    return SocialLawGenerator(SocialLawGeneratorSearch.GBFS, 
+                            heuristic = StatisticsHeuristic(), 
+                            preferred_operator_heuristics = [EarlyPOHeuristic()])
 
 @dataclass(order=True)
 class SearchNode:
@@ -64,21 +75,19 @@ class SearchNode:
         self.priority = priority
         self.social_law = social_law
 
-class SocialLawGeneratorSearch(Enum):
-    BFS = auto()
-    DFS = auto()
-    GBFS = auto()
-
-
 class Heuristic:
+    def __init__(self):
+        pass
+
     def get_priority(self, node : SearchNode):
         raise NotImplementedError()
 
-    def update_statistics(self, node : SearchNode, robustness_result : SocialLawRobustnessResult):
+    def report_current_node(self, node : SearchNode, robustness_result : SocialLawRobustnessResult):
         raise NotImplementedError()
 
-class StatisticsHeuristic:
+class StatisticsHeuristic(Heuristic):
     def __init__(self, before_fail_weight = 2, after_fail_weight = 1):
+        Heuristic.__init__(self)
         self.before_fail_weight = before_fail_weight
         self.after_fail_weight = after_fail_weight
         self.action_count_map = {}
@@ -89,34 +98,52 @@ class StatisticsHeuristic:
             h = h + self.action_count_map[(agent_name, action_name, args)]
         return -h
                             
-    def update_statistics(self, node : SearchNode, robustness_result : SocialLawRobustnessResult):
-        before_fail = True
-        for i, ai in enumerate(robustness_result.counter_example_orig_actions.actions):
-            compiled_action_instance = robustness_result.counter_example.actions[i]
-            parts = compiled_action_instance.action.name.split("_")
-            agent_name = parts[1]                                                    
-            if parts[0][0] in ["w","f"]:
-                before_fail = False
+    def report_current_node(self, node : SearchNode, robustness_result : SocialLawRobustnessResult):
+        if robustness_result.counter_example is not None:
+            before_fail = True
+            for i, ai in enumerate(robustness_result.counter_example_orig_actions.actions):
+                compiled_action_instance = robustness_result.counter_example.actions[i]
+                parts = compiled_action_instance.action.name.split("_")
+                agent_name = parts[1]                                                    
+                if parts[0][0] in ["w","f"]:
+                    before_fail = False
 
-            args_as_str = tuple(map(str, ai.actual_parameters))
-            if (agent_name, ai.action.name, args_as_str) not in self.action_count_map:
-                self.action_count_map[agent_name, ai.action.name, args_as_str] = 0    
-            if before_fail:
-                self.action_count_map[agent_name, ai.action.name, args_as_str] = self.action_count_map[agent_name, ai.action.name, args_as_str] + self.before_fail_weight
-            else:
-                self.action_count_map[agent_name, ai.action.name, args_as_str] =self. action_count_map[agent_name, ai.action.name, args_as_str] + self.after_fail_weight
+                args_as_str = tuple(map(str, ai.actual_parameters))
+                if (agent_name, ai.action.name, args_as_str) not in self.action_count_map:
+                    self.action_count_map[agent_name, ai.action.name, args_as_str] = 0    
+                if before_fail:
+                    self.action_count_map[agent_name, ai.action.name, args_as_str] = self.action_count_map[agent_name, ai.action.name, args_as_str] + self.before_fail_weight
+                else:
+                    self.action_count_map[agent_name, ai.action.name, args_as_str] =self. action_count_map[agent_name, ai.action.name, args_as_str] + self.after_fail_weight
 
-class SocialLawGenerator:
-    """ This class takes in a multi agent problem (possibly with social laws), and searches for a social law which will turn it robust."""
-    def __init__(self, search : SocialLawGeneratorSearch = SocialLawGeneratorSearch.BFS, heuristic : Optional[Heuristic] = None):
-        self.search = search
-        self.heuristic = heuristic
-    
-    def init_counters(self):
-        self.generated = 0
-        self.expanded = 0
+class EarlyPOHeuristic(Heuristic):
+    def __init__(self):
+        Heuristic.__init__(self)
+        self.early_actions = set()
 
-    def get_queue(self):
+    def get_priority(self, node : SearchNode) -> int:
+        if node.social_law.disallowed_actions.issubset(self.early_actions):
+            # 0 Indicates preferred
+            return 0
+        else:
+            # 1 Indicates not preferred
+            return 1
+                            
+    def report_current_node(self, node : SearchNode, robustness_result : SocialLawRobustnessResult):
+        self.early_actions.clear()
+        
+        if robustness_result.counter_example is not None:            
+            for i, ai in enumerate(robustness_result.counter_example_orig_actions.actions):
+                compiled_action_instance = robustness_result.counter_example.actions[i]
+                parts = compiled_action_instance.action.name.split("_")
+                agent_name = parts[1]                                                    
+                args_as_str = tuple(map(str, ai.actual_parameters))
+                if parts[0][0] in ["w","f"]:
+                    break
+                self.early_actions.add( (agent_name, ai.action.name, args_as_str) )
+
+class POQueue:
+    def get_single_queue(self):
         if self.search == SocialLawGeneratorSearch.BFS:
             return queue.Queue()
         elif self.search == SocialLawGeneratorSearch.DFS:
@@ -124,6 +151,52 @@ class SocialLawGenerator:
         elif self.search == SocialLawGeneratorSearch.GBFS:
             return queue.PriorityQueue()
 
+    def __init__(self, num_po_heuristics = 0, search : SocialLawGeneratorSearch = SocialLawGeneratorSearch.BFS):
+        self.search = search        
+        self.queues = [self.get_single_queue()] * (2 ** num_po_heuristics)
+        self.current_queue = 0
+
+    def empty(self) -> bool:
+        for queue in self.queues:
+            if not queue.empty():
+                return False
+        return True            
+
+    def get(self):       
+        self.current_queue = (self.current_queue + 1) % len(self.queues)
+        while self.queues[self.current_queue].empty():
+            self.current_queue = (self.current_queue + 1) % len(self.queues)
+        return self.queues[self.current_queue].get()
+
+    def put(self, node : SearchNode, pref_profile : List[int]):
+        preferred_queues = []
+        for queue_index in range(len(pref_profile)):
+            if pref_profile[queue_index] == 0:
+                preferred_queues.append(queue_index)        
+
+        for prefs in chain.from_iterable(combinations(preferred_queues, r) for r in range(len(preferred_queues)+1)):
+            queue_index = 0
+            for pref_index in prefs:
+                queue_index = queue_index + (2 ** pref_index)
+            self.queues[queue_index].put(node)
+            
+class SocialLawGenerator:
+    """ This class takes in a multi agent problem (possibly with social laws), and searches for a social law which will turn it robust."""
+    def __init__(self, 
+                    search : SocialLawGeneratorSearch = SocialLawGeneratorSearch.BFS, 
+                    heuristic : Optional[Heuristic] = None,
+                    preferred_operator_heuristics : List[Heuristic] = []):
+        self.search = search
+        self.heuristic = heuristic
+        self.po = preferred_operator_heuristics
+        self.all_heuristics = set(preferred_operator_heuristics)
+        if self.heuristic is not None:
+            self.all_heuristics.add(self.heuristic)
+
+    
+    def init_counters(self):
+        self.generated = 0
+        self.expanded = 0
 
     def generate_successors(self, current_sl : SocialLaw, action_index_in_plan : int, original_action_instance : ActionInstance, compiled_action_instance : ActionInstance):
         parts = compiled_action_instance.action.name.split("_")
@@ -143,12 +216,12 @@ class SocialLawGenerator:
         robustness_checker = SocialLawRobustnessChecker()        
         self.init_counters()
 
-        open = self.get_queue()
+        open = POQueue(len(self.po), self.search)
         closed : Set[SocialLaw] = set()
         infeasible_sap : Set[SocialLaw] = set()
 
         empty_social_law = SocialLaw()
-        open.put( SearchNode(empty_social_law) )
+        open.put( SearchNode(empty_social_law), [1] * len(self.po) )
         self.generated = self.generated + 1
 
         while not open.empty():
@@ -165,6 +238,8 @@ class SocialLawGenerator:
 
                 current_problem = current_sl.compile(initial_problem).problem
                 robustness_result = robustness_checker.is_robust(current_problem)
+                for h in self.all_heuristics:
+                    h.report_current_node(current_node, robustness_result)
 
                 if robustness_result.status == SocialLawRobustnessStatus.ROBUST_RATIONAL:
                     # We found a robust social law - return
@@ -173,17 +248,17 @@ class SocialLawGenerator:
                     # We made one of the single agent problems unsolvable - this is a dead end (for this simple search)
                     infeasible_sap.add(current_sl)                    
                 else:
-                    if self.heuristic is not None:
-                        self.heuristic.update_statistics(current_node, robustness_result)
-
                     # We have a counter example, generate a successor for removing each of the actions that appears there                    
                     for i, ai in enumerate(robustness_result.counter_example_orig_actions.actions):
                         compiled_action_instance = robustness_result.counter_example.actions[i]
                         for succ_sl in self.generate_successors(current_sl, i, ai, compiled_action_instance):
                             succ_node = SearchNode(succ_sl)
+                            
+                            pref = list(map(lambda poh: poh.get_priority(succ_node), self.po))
+                            
                             if self.heuristic is not None:
                                 succ_node.priority = self.heuristic.get_priority(succ_node)
-                            open.put(succ_node)
+                            open.put(succ_node, pref)
                             self.generated = self.generated + 1
 
                         

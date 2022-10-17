@@ -24,7 +24,7 @@ from unified_planning.social_law.social_law import SocialLaw
 from unified_planning.social_law.waitfor_specification import WaitforSpecification
 from unified_planning.social_law.ma_problem_waitfor import MultiAgentProblemWithWaitfor
 from unified_planning.model.multi_agent.ma_centralizer import MultiAgentProblemCentralizer
-from unified_planning.social_law.synthesis import SocialLawGenerator, SocialLawGeneratorSearch, StatisticsHeuristic
+from unified_planning.social_law.synthesis import SocialLawGenerator, SocialLawGeneratorSearch, get_gbfs_social_law_generator
 from unified_planning.model.multi_agent import *
 from unified_planning.io import PDDLWriter
 from unified_planning.engines import PlanGenerationResultStatus
@@ -156,7 +156,7 @@ class TestProblem(TestCase):
         rprob2 = g2.generate_social_law(problem)
         self.assertIsNotNone(rprob2)
 
-        g3 = SocialLawGenerator(SocialLawGeneratorSearch.GBFS, StatisticsHeuristic())
+        g3 = get_gbfs_social_law_generator()
         rprob3 = g3.generate_social_law(problem)
         self.assertIsNotNone(rprob3)
         
