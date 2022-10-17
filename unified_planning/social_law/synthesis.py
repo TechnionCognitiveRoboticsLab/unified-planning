@@ -18,7 +18,8 @@ from collections import defaultdict
 import unified_planning as up
 from unified_planning.shortcuts import *
 from unified_planning.social_law.ma_problem_waitfor import MultiAgentProblemWithWaitfor
-from unified_planning.social_law.social_law import SocialLaw, SocialLawRobustnessChecker, SocialLawRobustnessStatus
+from unified_planning.social_law.social_law import SocialLaw
+from unified_planning.social_law.robustness_checker import SocialLawRobustnessChecker, SocialLawRobustnessStatus
 from unified_planning.model import Parameter, Fluent, InstantaneousAction, problem_kind
 from unified_planning.exceptions import UPProblemDefinitionError
 from unified_planning.model import Problem, InstantaneousAction, DurativeAction, Action
