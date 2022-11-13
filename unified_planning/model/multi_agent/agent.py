@@ -15,6 +15,7 @@
 """This module defines an agent class."""
 
 import unified_planning as up
+from typing import List, Dict, Set, Union, cast
 from unified_planning.model.mixins import (
     ActionsSetMixin,
     FluentsSetMixin,
@@ -44,8 +45,10 @@ class Agent(
         ActionsSetMixin.__init__(
             self, ma_problem.env, ma_problem._add_user_type, self.has_name
         )
+        self._ma_problem = ma_problem
         self._env = ma_problem.env
         self._name: str = name
+        self._goals: List["up.model.fnode.FNode"] = list()
 
     def __getstate__(self):
         state = self.__dict__.copy()
@@ -71,6 +74,43 @@ class Agent(
         """Returns this `Agent` `Environment`."""
         return self._env
 
+    def add_goal(
+        self, goal: Union["up.model.fnode.FNode", "up.model.fluent.Fluent", bool]
+    ):
+        """
+        Adds the given `goal` to the `Agent`; a goal is an expression that must be evaluated to `True` at the
+        end of the execution of a :class:`~unified_planning.plans.Plan`. If a `Plan` does not satisfy all the given `goals`, it is not valid.
+
+        :param goal: The expression added to the `Agent` :func:`goals <unified_planning.model.multi_agent.agent.goals>`.
+        """
+        assert (
+            isinstance(goal, bool) or goal.environment == self._env
+        ), "goal does not have the same environment of the problem"
+        (goal_exp,) = self._env.expression_manager.auto_promote(goal)
+        assert self._env.type_checker.get_type(goal_exp).is_bool_type()
+        if goal_exp != self._env.expression_manager.TRUE():
+            self._goals.append(goal_exp)
+
+    def add_goals(
+        self, goals: List[Union["up.model.fnode.FNode", "up.model.fluent.Fluent", bool]]
+    ):
+        """
+        Adds the given `goal` to the `Agent`.
+
+        :param goals: The `list` of `goals` that must be added to the `Agent`.
+        """
+        for goal in goals:
+            self.add_goal(goal)
+
+    @property
+    def goals(self) -> List["up.model.fnode.FNode"]:
+        """Returns all the `goals` in the `Agent`."""
+        return self._goals
+
+    def clear_goals(self):
+        """Removes all the `goals` from the `Agent`."""
+        self._goals = []
+
     def __repr__(self) -> str:
         s = []
         s.append(f"Agent name = {str(self._name)}\n\n")
@@ -81,6 +121,10 @@ class Agent(
         s.append("actions = [\n")
         for a in self._actions:
             s.append(f" {str(a)}\n")
+        s.append("]\n\n")
+        s.append("goals = [\n")
+        for g in self.goals:
+            s.append(f"  {str(g)}\n")
         s.append("]\n\n")
         return "".join(s)
 
@@ -93,6 +137,8 @@ class Agent(
             return False
         if set(self._actions) != set(oth._actions):
             return False
+        if set(self._goals) != set(oth._goals):
+            return False
         return True
 
     def __hash__(self) -> int:
@@ -101,4 +147,13 @@ class Agent(
             res += hash(f)
         for a in self._actions:
             res += hash(a)
+        for g in self._goals:
+            res += hash(g)
         return res
+
+    def clone(self):
+        new_a = Agent(self._name, self._ma_problem)
+        new_a._fluents = self._fluents[:]
+        new_a._actions = [a.clone() for a in self._actions]
+        new_a._goals = self._goals[:]
+        return new_a
