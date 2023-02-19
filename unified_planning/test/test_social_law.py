@@ -24,11 +24,13 @@ from unified_planning.social_law.social_law import SocialLaw
 from unified_planning.social_law.waitfor_specification import WaitforSpecification
 from unified_planning.social_law.ma_problem_waitfor import MultiAgentProblemWithWaitfor
 from unified_planning.model.multi_agent.ma_centralizer import MultiAgentProblemCentralizer
+from unified_planning.model.multi_agent.sa_to_ma_converter import SingleAgentToMultiAgentConverter
 from unified_planning.social_law.synthesis import SocialLawGenerator, SocialLawGeneratorSearch, get_gbfs_social_law_generator
 from unified_planning.model.multi_agent import *
-from unified_planning.io import PDDLWriter
+from unified_planning.io import PDDLWriter, PDDLReader
 from unified_planning.engines import PlanGenerationResultStatus
 from collections import namedtuple
+import os
 
 POSITIVE_OUTCOMES = frozenset(
     [
@@ -43,6 +45,10 @@ UNSOLVABLE_OUTCOMES = frozenset(
         PlanGenerationResultStatus.UNSOLVABLE_PROVEN,
     ]
 )
+
+FILE_PATH = os.path.dirname(os.path.abspath(__file__))
+PDDL_DOMAINS_PATH = os.path.join(FILE_PATH, "pddl")
+
 
 class RobustnessTestCase:
     def __init__(self, name, 
@@ -256,5 +262,17 @@ class TestProblem(TestCase):
                 save_pddl=True,                
                 )
             self.assertEqual(slrc.is_robust(problem).status, t.expected_outcome, t.name)
+
+    def test_sa_ma_converter(self):
+        reader = PDDLReader()
+
+        domain_filename = os.path.join(PDDL_DOMAINS_PATH, "citycar", "domain.pddl")
+        problem_filename = os.path.join(PDDL_DOMAINS_PATH, "citycar", "problem.pddl")
+        problem = reader.parse_problem(domain_filename, problem_filename)
+
+        samac = SingleAgentToMultiAgentConverter(["car"])
+
+        result = samac.compile(problem)
+        
 
             

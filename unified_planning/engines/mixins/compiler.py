@@ -32,6 +32,7 @@ class CompilationKind(Enum):
     MA_CENTRALIZATION = auto()
     MA_SL_ROBUSTNESS_VERIFICATION = auto()
     MA_SL_SOCIAL_LAW = auto()
+    SA_MA_CONVERSION = auto()
 
 
 class CompilerMixin:
