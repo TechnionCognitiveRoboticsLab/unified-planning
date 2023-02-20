@@ -35,6 +35,7 @@ from typing import List, Dict
 from unified_planning.exceptions import UPUsageError
 import unified_planning.model.walkers as walkers
 from unified_planning.model.walkers.identitydag import IdentityDagWalker
+import random
 
 credits = Credits('Single Agent to Multi Agent Converter',
                   'Technion Cognitive Robotics Lab (cf. https://github.com/TechnionCognitiveRoboticsLab)',
@@ -83,6 +84,7 @@ class SingleAgentToMultiAgentConverter(engines.engine.Engine, CompilerMixin):
         engines.engine.Engine.__init__(self)
         CompilerMixin.__init__(self, CompilationKind.SA_MA_CONVERSION)                
         self.agent_types = agent_types
+        self.agent_map = {}
         
     @staticmethod
     def get_credits(**kwargs) -> Optional['Credits']:
@@ -145,6 +147,18 @@ class SingleAgentToMultiAgentConverter(engines.engine.Engine, CompilerMixin):
         return "agent__" + obj.name
 
 
+    
+    def assign_goal_to_agent(self, goal):        
+        agent = None
+        for arg in goal.args:
+            if arg.object() in self.agent_map:
+                agent = self.agent_map[arg.object()]
+                break
+        if agent is None:
+            agent = random.choice(list(self.agent_map.values()))
+        agent.add_goal(goal)
+        
+
     def _compile(self, problem: "up.model.AbstractProblem", compilation_kind: "up.engines.CompilationKind") -> CompilerResult:
         '''Creates a problem that is a multi-agent version of the original problem'''
         assert isinstance(problem, Problem)
@@ -161,7 +175,8 @@ class SingleAgentToMultiAgentConverter(engines.engine.Engine, CompilerMixin):
             utype = problem.user_type(agent_type)
             for agent_obj in problem.objects(utype):
                 agent = Agent(self.agent_name(agent_obj), new_problem)
-                new_problem.add_agent(agent)                
+                new_problem.add_agent(agent)
+                self.agent_map[agent.name] = agent
 
         fmap = FluentMap("c")
         for f in problem.fluents:
@@ -175,8 +190,11 @@ class SingleAgentToMultiAgentConverter(engines.engine.Engine, CompilerMixin):
             d = {}
             param = None
             for p in action.parameters:                
-                if param is None and p.type.name in self.agent_types:
-                    param = p
+                if p.type.name in self.agent_types:
+                    if param is None:
+                        param = p
+                    else:
+                        raise UPUsageError("Too many parameters of action '" + action.name + "' match specified agent types")
                 else:
                     d[p.name] = p.type
             if param is None:
@@ -205,11 +223,13 @@ class SingleAgentToMultiAgentConverter(engines.engine.Engine, CompilerMixin):
                             new_action.add_effect(timing, pg.ground(e.fluent, {param.name : agent_obj}), e.value)
 
                 agent.add_action(new_action)
-            
-            
 
-        for goal in problem.goals:            
-            new_problem.add_goal(goal)
+        for goal in problem.goals:      
+            if goal.is_and():
+                for g in goal.args:
+                    self.assign_goal_to_agent(g)      
+            else:
+                self.assign_goal_to_agent(goal)
 
         return CompilerResult(
             new_problem, partial(replace_action, map=new_to_old), self.name

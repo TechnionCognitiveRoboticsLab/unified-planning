@@ -30,6 +30,7 @@ from unified_planning.model.multi_agent import *
 from unified_planning.io import PDDLWriter, PDDLReader
 from unified_planning.engines import PlanGenerationResultStatus
 from collections import namedtuple
+import random
 import os
 
 POSITIVE_OUTCOMES = frozenset(
@@ -265,14 +266,19 @@ class TestProblem(TestCase):
 
     def test_sa_ma_converter(self):
         reader = PDDLReader()
-
-        domain_filename = os.path.join(PDDL_DOMAINS_PATH, "citycar", "domain.pddl")
-        problem_filename = os.path.join(PDDL_DOMAINS_PATH, "citycar", "problem.pddl")
+        random.seed(2023)
+        
+        domain_filename = "/home/karpase/git/pyperplan/benchmarks/transport/domain.pddl"
+        #os.path.join(PDDL_DOMAINS_PATH, "citycar", "domain.pddl")
+        problem_filename = "/home/karpase/git/pyperplan/benchmarks/transport/task01.pddl"
+        #os.path.join(PDDL_DOMAINS_PATH, "citycar", "problem.pddl")
         problem = reader.parse_problem(domain_filename, problem_filename)
 
-        samac = SingleAgentToMultiAgentConverter(["car"])
+        samac = SingleAgentToMultiAgentConverter(["vehicle"])
 
         result = samac.compile(problem)
+
+        print(result.problem)
         
 
             
